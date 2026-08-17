@@ -69,8 +69,8 @@ function App() {
               <a href="#demo" className="text-slate-600 hover:text-blue-700 font-medium transition-colors">Demo</a>
             </div>
             <div>
-              <button className="bg-blue-700 hover:bg-blue-800 text-white px-5 py-2 rounded-lg font-medium transition-colors shadow-sm">
-                Access Portal
+              <button onClick={() => setView('submit')} className="bg-blue-700 hover:bg-blue-800 text-white px-5 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                Lodge a Grievance
               </button>
             </div>
           </div>
@@ -118,11 +118,12 @@ function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-[#f8fafc] to-transparent z-10 h-32 bottom-0 top-auto"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#f8fafc] to-transparent z-10 h-32 bottom-0 top-auto pointer-events-none"></div>
           <img 
             src="https://via.placeholder.com/1200x675?text=hero-dashboard.png" 
-            alt="Pravah Dashboard Mockup" 
-            className="rounded-2xl shadow-2xl border border-slate-200 object-cover w-full h-auto"
+            alt="Click to experience the Pravah MVP" 
+            onClick={() => setView('submit')}
+            className="rounded-2xl shadow-2xl border border-slate-200 object-cover w-full h-auto cursor-pointer hover:shadow-3xl transition-shadow duration-300"
           />
         </motion.div>
       </section>
