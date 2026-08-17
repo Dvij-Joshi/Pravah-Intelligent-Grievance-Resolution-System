@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, ArrowLeft, MapPin, User, Tag, Clock,
@@ -168,7 +168,7 @@ const TABS = [
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function GrievanceDetails({ data, grievanceId, onBack, onTrack }) {
+export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, onVerify }) {
   const gid = grievanceId || "GRV-1024";
   const g   = buildGrievanceDetails(data, gid);
   const [tab, setTab] = useState("overview");
@@ -203,6 +203,33 @@ export default function GrievanceDetails({ data, grievanceId, onBack, onTrack })
       </nav>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+
+        {/* ── Action Required Banner ── */}
+        {onVerify && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-green-50 border border-green-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-green-500 rounded-xl text-white flex-shrink-0 mt-0.5">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-green-950">Action Required: Verify Resolution</h3>
+                <p className="text-xs text-green-700 mt-0.5">
+                  Officer Rahul Sharma has marked this grievance as resolved. AI Evidence Agent verified before/after photos with 91% confidence. Please verify if the issue is resolved.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onVerify}
+              className="flex-shrink-0 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap"
+            >
+              Verify Resolution <ChevronRight className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
 
         {/* ── Hero card ── */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
