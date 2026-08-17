@@ -14,6 +14,7 @@ import {
   FileText
 } from 'lucide-react';
 import SubmitGrievance from './pages/citizen/SubmitGrievance';
+import GrievanceSubmitted from './pages/citizen/GrievanceSubmitted';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
@@ -36,10 +37,18 @@ function App() {
         onBack={() => setView('home')}
         onSuccess={(data) => {
           setSubmittedData(data);
-          // TODO: navigate to GrievanceSubmitted screen (screen 3)
-          setView('home');
-          alert(`Grievance submitted! Grievance ID: GRV-${Math.floor(1000 + Math.random() * 9000)}`);
+          setView('submitted');
         }}
+      />
+    );
+  }
+
+  if (view === 'submitted') {
+    return (
+      <GrievanceSubmitted
+        data={submittedData}
+        onTrack={() => setView('home')} // TODO: navigate to TrackGrievance screen (screen 4)
+        onHome={() => setView('home')}
       />
     );
   }
