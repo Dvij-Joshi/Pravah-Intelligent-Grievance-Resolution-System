@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, ArrowLeft, Clock, MapPin, User, Zap,
@@ -121,7 +121,7 @@ function AgentPipeline({ stage }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function TrackGrievance({ data, grievanceId, onBack, onHome }) {
+export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDetails }) {
   const gid = grievanceId || "GRV-1024";
   const [state, setState] = useState(() => buildGrievanceState(data, gid));
   const [hoursElapsed, setHoursElapsed] = useState(2);
@@ -231,9 +231,17 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome }) {
               <span className="font-bold text-slate-900 text-lg">Pravah</span>
             </div>
           </div>
-          <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-            Citizen Portal
-          </span>
+          <div className="flex items-center gap-2">
+            {onDetails && (
+              <button onClick={onDetails}
+                className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-all hover:bg-blue-100">
+                View Details
+              </button>
+            )}
+            <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              Citizen Portal
+            </span>
+          </div>
         </div>
       </nav>
 
