@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import OfficerDashboard from "./pages/officer/OfficerDashboard";
 import AllComplaints from "./pages/officer/AllComplaints";
+import ComplaintDetails from "./pages/officer/ComplaintDetails";
 
 // Placeholder for screens not yet built
 const ComingSoon = ({ title }) => (
@@ -23,7 +24,7 @@ export default function App() {
         {/* Officer Portal */}
         <Route path="/officer/dashboard" element={<OfficerDashboard />} />
         <Route path="/officer/complaints" element={<AllComplaints />} />
-        <Route path="/officer/complaints/:id" element={<ComingSoon title="Complaint Details" />} />
+        <Route path="/officer/complaints/:id" element={<ComplaintDetails />} />
         <Route path="/officer/workflow" element={<ComingSoon title="Action Workflow" />} />
         <Route path="/officer/evidence" element={<ComingSoon title="Evidence Upload" />} />
         <Route path="/officer/evidence-report" element={<ComingSoon title="AI Evidence Report" />} />
