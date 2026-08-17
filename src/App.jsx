@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ShieldCheck, 
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   FileText
 } from 'lucide-react';
+import SubmitGrievance from './pages/citizen/SubmitGrievance';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
@@ -26,6 +27,23 @@ const FadeIn = ({ children, delay = 0 }) => (
 );
 
 function App() {
+  const [view, setView] = useState('home');
+  const [submittedData, setSubmittedData] = useState(null);
+
+  if (view === 'submit') {
+    return (
+      <SubmitGrievance
+        onBack={() => setView('home')}
+        onSuccess={(data) => {
+          setSubmittedData(data);
+          // TODO: navigate to GrievanceSubmitted screen (screen 3)
+          setView('home');
+          alert(`Grievance submitted! Grievance ID: GRV-${Math.floor(1000 + Math.random() * 9000)}`);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Navigation */}
@@ -72,7 +90,10 @@ function App() {
               A multi-agent AI system that takes a citizen grievance from submission to verified resolution, while automatically planning actions, monitoring progress, checking evidence, and detecting recurrence.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <button className="bg-blue-700 hover:bg-blue-800 text-white px-8 py-3.5 rounded-xl font-semibold text-lg transition-colors shadow-sm flex items-center justify-center gap-2">
+              <button
+                onClick={() => setView('submit')}
+                className="bg-blue-700 hover:bg-blue-800 text-white px-8 py-3.5 rounded-xl font-semibold text-lg transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
                 Experience the MVP <ArrowRight className="h-5 w-5" />
               </button>
               <button className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-8 py-3.5 rounded-xl font-semibold text-lg transition-colors shadow-sm">
