@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import SubmitGrievance from './pages/citizen/SubmitGrievance';
 import GrievanceSubmitted from './pages/citizen/GrievanceSubmitted';
+import TrackGrievance from './pages/citizen/TrackGrievance';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
@@ -30,6 +31,7 @@ const FadeIn = ({ children, delay = 0 }) => (
 function App() {
   const [view, setView] = useState('home');
   const [submittedData, setSubmittedData] = useState(null);
+  const [trackGid, setTrackGid] = useState(null);
 
   if (view === 'submit') {
     return (
@@ -47,7 +49,18 @@ function App() {
     return (
       <GrievanceSubmitted
         data={submittedData}
-        onTrack={() => setView('home')} // TODO: navigate to TrackGrievance screen (screen 4)
+        onTrack={(gid) => { setTrackGid(gid); setView('track'); }}
+        onHome={() => setView('home')}
+      />
+    );
+  }
+
+  if (view === 'track') {
+    return (
+      <TrackGrievance
+        data={submittedData}
+        grievanceId={trackGid}
+        onBack={() => setView('submitted')}
         onHome={() => setView('home')}
       />
     );
