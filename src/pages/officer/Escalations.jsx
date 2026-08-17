@@ -1,0 +1,439 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  AlertTriangle,
+  Clock,
+  User,
+  ChevronRight,
+  CheckCircle2,
+  Bell,
+  ShieldAlert,
+  ArrowUpRight,
+  MessageSquare,
+  Calendar,
+  Zap,
+  Building2,
+  Circle,
+  X,
+  Send,
+} from "lucide-react";
+import OfficerLayout from "../../layouts/OfficerLayout";
+import { PriorityBadge } from "../../components/Badges";
+
+// ── Dummy escalation data ──────────────────────────────────────────────────
+const escalations = [
+  {
+    id: "ESC-001",
+    grievanceId: "GRV-1031",
+    grievanceTitle: "Road damaged after recent heavy rain",
+    category: "Road Damage",
+    priority: "HIGH",
+    reason: "SLA breach — no inspection recorded within 6 hours",
+    escalatedTo: "District Supervisor",
+    escalatedToRole: "Priya Menon · District Supervisor",
+    escalatedAt: "09 May 2025, 08:00 PM",
+    autoTriggered: true,
+    status: "Pending Response",
+    slaBreached: "18 hours ago",
+    reminders: 2,
+    notes: [],
+    history: [
+      { event: "SLA breach detected by system", time: "09 May 2025, 02:00 PM", by: "System (Auto)" },
+      { event: "Reminder sent to officer", time: "09 May 2025, 05:00 PM", by: "System (Auto)" },
+      { event: "Escalated to District Supervisor", time: "09 May 2025, 08:00 PM", by: "System (Auto)" },
+      { event: "Second reminder to District Supervisor", time: "10 May 2025, 08:00 AM", by: "System (Auto)" },
+    ],
+  },
+  {
+    id: "ESC-002",
+    grievanceId: "GRV-1019",
+    grievanceTitle: "Sewage overflow near residential area",
+    category: "Sewage",
+    priority: "HIGH",
+    reason: "No action taken for 24 hours after assignment",
+    escalatedTo: "Executive Engineer",
+    escalatedToRole: "Arun Desai · Executive Engineer",
+    escalatedAt: "09 May 2025, 03:00 PM",
+    autoTriggered: true,
+    status: "Acknowledged",
+    slaBreached: "26 hours ago",
+    reminders: 3,
+    notes: [
+      { by: "Arun Desai", text: "Team dispatched to site. Pump truck arranged.", time: "09 May 2025, 04:30 PM" },
+    ],
+    history: [
+      { event: "Complaint assigned to ward officer", time: "08 May 2025, 03:10 PM", by: "System (Auto)" },
+      { event: "No action detected — first reminder sent", time: "08 May 2025, 09:00 PM", by: "System (Auto)" },
+      { event: "No action detected — second reminder sent", time: "09 May 2025, 06:00 AM", by: "System (Auto)" },
+      { event: "Escalated to Executive Engineer", time: "09 May 2025, 03:00 PM", by: "System (Auto)" },
+      { event: "Escalation acknowledged by Arun Desai", time: "09 May 2025, 04:15 PM", by: "Arun Desai" },
+    ],
+  },
+  {
+    id: "ESC-003",
+    grievanceId: "GRV-1024",
+    grievanceTitle: "No water supply since 4 days",
+    category: "Water Supply",
+    priority: "HIGH",
+    reason: "Citizen rejected resolution — case reopened",
+    escalatedTo: "District Supervisor",
+    escalatedToRole: "Priya Menon · District Supervisor",
+    escalatedAt: "10 May 2025, 02:00 PM",
+    autoTriggered: false,
+    status: "Pending Response",
+    slaBreached: "4h remaining",
+    reminders: 1,
+    notes: [],
+    history: [
+      { event: "Resolution submitted by officer", time: "10 May 2025, 12:00 PM", by: "Rahul Sharma" },
+      { event: "Citizen rejected resolution — issue still exists", time: "10 May 2025, 01:30 PM", by: "Amit Patel (Citizen)" },
+      { event: "Case reopened automatically", time: "10 May 2025, 01:31 PM", by: "System (Auto)" },
+      { event: "Escalated to District Supervisor", time: "10 May 2025, 02:00 PM", by: "System (Auto)" },
+    ],
+  },
+];
+
+const statusConfig = {
+  "Pending Response": {
+    bg: "bg-red-50", text: "text-red-700", border: "border-red-200",
+    dot: "bg-red-500", icon: AlertTriangle,
+  },
+  "Acknowledged": {
+    bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200",
+    dot: "bg-amber-500", icon: Bell,
+  },
+  "Resolved": {
+    bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200",
+    dot: "bg-emerald-500", icon: CheckCircle2,
+  },
+};
+
+const TABS = ["All", "Pending Response", "Acknowledged", "Resolved"];
+
+function EscalationCard({ esc, onExpand, expanded }) {
+  const navigate = useNavigate();
+  const cfg = statusConfig[esc.status];
+  const [note, setNote] = useState("");
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"
+    >
+      {/* Left color strip */}
+      <div className={`h-1 w-full ${esc.status === "Pending Response" ? "bg-red-500" : esc.status === "Acknowledged" ? "bg-amber-400" : "bg-emerald-500"}`} />
+
+      {/* Card Header */}
+      <div
+        className="px-5 py-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+        onClick={onExpand}
+      >
+        <div className="flex items-start gap-4">
+          {/* Alert Icon */}
+          <div className={`p-2.5 rounded-xl flex-shrink-0 mt-0.5 border ${cfg.bg} ${cfg.border}`}>
+            <cfg.icon className={`h-5 w-5 ${cfg.text}`} />
+          </div>
+
+          {/* Main content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded">
+                {esc.id}
+              </span>
+              <span className="text-xs text-slate-400">→</span>
+              <span className="text-xs font-semibold text-slate-600">{esc.grievanceId}</span>
+              <PriorityBadge priority={esc.priority} />
+              <span className={`ml-auto flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                {esc.status}
+              </span>
+            </div>
+
+            <h3 className="text-sm font-semibold text-slate-800 truncate mb-2">{esc.grievanceTitle}</h3>
+
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert size={11} className="text-red-400" />
+                {esc.reason}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <User size={11} className="text-slate-400" />
+                Escalated to: <span className="font-semibold text-slate-700">{esc.escalatedTo}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar size={11} className="text-slate-400" />
+                {esc.escalatedAt}
+              </span>
+              {esc.autoTriggered && (
+                <span className="flex items-center gap-1 text-violet-600 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full font-semibold">
+                  <Zap size={10} /> Auto-triggered
+                </span>
+              )}
+              {esc.reminders > 1 && (
+                <span className="flex items-center gap-1 text-amber-600">
+                  <Bell size={11} /> {esc.reminders} reminders sent
+                </span>
+              )}
+            </div>
+          </div>
+
+          <ChevronRight
+            size={16}
+            className={`text-slate-300 flex-shrink-0 self-center transition-transform ${expanded ? "rotate-90" : ""}`}
+          />
+        </div>
+      </div>
+
+      {/* Expanded panel */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-slate-100 px-5 py-5 bg-slate-50/50 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Timeline */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Escalation Timeline</h4>
+                <div className="space-y-0">
+                  {esc.history.map((h, idx) => {
+                    const isLast = idx === esc.history.length - 1;
+                    return (
+                      <div key={idx} className="flex gap-3">
+                        <div className="flex flex-col items-center flex-shrink-0">
+                          <div className="w-2 h-2 rounded-full bg-slate-400 mt-1.5 flex-shrink-0" />
+                          {!isLast && <div className="w-px bg-slate-200 flex-1 my-1" style={{ minHeight: "1.5rem" }} />}
+                        </div>
+                        <div className={`pb-3 ${isLast ? "pb-0" : ""}`}>
+                          <p className="text-xs font-medium text-slate-700">{h.event}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{h.time} · {h.by}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Notes + Actions */}
+              <div className="space-y-4">
+                {/* Existing notes */}
+                {esc.notes.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Supervisor Notes</h4>
+                    {esc.notes.map((n, i) => (
+                      <div key={i} className="bg-white border border-slate-200 rounded-lg p-3 mb-2">
+                        <p className="text-xs text-slate-700 mb-1.5">{n.text}</p>
+                        <p className="text-xs text-slate-400">— {n.by} · {n.time}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add note */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Add Note</h4>
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    rows={2}
+                    placeholder="Add a note or update…"
+                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white placeholder:text-slate-400"
+                  />
+                  <button
+                    disabled={!note.trim()}
+                    className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  >
+                    <Send size={11} /> Submit Note
+                  </button>
+                </div>
+
+                {/* Quick Actions */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Quick Actions</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => navigate(`/officer/complaints/${esc.grievanceId}`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <ArrowUpRight size={12} /> View Complaint
+                    </button>
+                    {esc.status !== "Resolved" && (
+                      <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
+                        <CheckCircle2 size={12} /> Mark Resolved
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+export default function Escalations() {
+  const [activeTab, setActiveTab] = useState("All");
+  const [expandedId, setExpandedId] = useState("ESC-001");
+
+  const filtered = activeTab === "All"
+    ? escalations
+    : escalations.filter((e) => e.status === activeTab);
+
+  const tabCounts = TABS.reduce((acc, t) => {
+    acc[t] = t === "All" ? escalations.length : escalations.filter((e) => e.status === t).length;
+    return acc;
+  }, {});
+
+  const stats = {
+    total: escalations.length,
+    pending: escalations.filter((e) => e.status === "Pending Response").length,
+    acknowledged: escalations.filter((e) => e.status === "Acknowledged").length,
+    autoTriggered: escalations.filter((e) => e.autoTriggered).length,
+  };
+
+  return (
+    <OfficerLayout>
+      {/* Header */}
+      <div className="mb-5">
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Escalations</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Cases automatically escalated due to SLA breach, inaction, or citizen rejection
+        </p>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Total Escalations", value: stats.total, icon: ShieldAlert, color: "text-slate-700", bg: "bg-slate-50", border: "border-slate-200" },
+          { label: "Pending Response", value: stats.pending, icon: AlertTriangle, color: "text-red-700", bg: "bg-red-50", border: "border-red-100" },
+          { label: "Acknowledged", value: stats.acknowledged, icon: Bell, color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-100" },
+          { label: "Auto-triggered", value: stats.autoTriggered, icon: Zap, color: "text-violet-700", bg: "bg-violet-50", border: "border-violet-100" },
+        ].map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className={`${s.bg} border ${s.border} rounded-xl px-4 py-3.5 flex items-center gap-3`}
+          >
+            <div className={`p-2 rounded-lg bg-white/60 flex-shrink-0`}>
+              <s.icon className={`h-5 w-5 ${s.color}`} />
+            </div>
+            <div>
+              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Alert banner if pending */}
+      {stats.pending > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 }}
+          className="bg-red-50 border border-red-200 rounded-xl px-5 py-3.5 flex items-center gap-3 mb-5"
+        >
+          <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          <div className="flex-1">
+            <span className="text-sm font-semibold text-red-800">
+              {stats.pending} escalation{stats.pending > 1 ? "s" : ""} awaiting supervisor response.
+            </span>
+            <span className="text-sm text-red-600 ml-1">
+              Your supervisors have been notified. Immediate follow-up required.
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-5 bg-slate-100 p-1 rounded-xl w-fit">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {tab}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              activeTab === tab
+                ? tab === "Pending Response" ? "bg-red-100 text-red-700"
+                : tab === "Acknowledged" ? "bg-amber-100 text-amber-700"
+                : tab === "Resolved" ? "bg-emerald-100 text-emerald-700"
+                : "bg-blue-100 text-blue-700"
+                : "bg-slate-200 text-slate-500"
+            }`}>
+              {tabCounts[tab]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Escalation Cards */}
+      <div className="space-y-4">
+        <AnimatePresence>
+          {filtered.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-white border border-slate-200 rounded-xl flex flex-col items-center justify-center py-20 text-center"
+            >
+              <CheckCircle2 className="h-12 w-12 text-emerald-300 mb-3" />
+              <div className="font-semibold text-slate-500 text-lg">All clear!</div>
+              <div className="text-sm text-slate-400 mt-1">No escalations in this category.</div>
+            </motion.div>
+          ) : (
+            filtered.map((esc) => (
+              <EscalationCard
+                key={esc.id}
+                esc={esc}
+                expanded={expandedId === esc.id}
+                onExpand={() => setExpandedId(expandedId === esc.id ? null : esc.id)}
+              />
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* How escalation works */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="mt-6 bg-slate-50 border border-slate-200 rounded-xl p-5"
+      >
+        <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+          <Zap size={14} className="text-violet-500" /> How Automatic Escalation Works
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs text-slate-500">
+          {[
+            { step: "1", label: "SLA breach or inaction detected", icon: Clock },
+            { step: "2", label: "Officer reminder sent", icon: Bell },
+            { step: "3", label: "No action → Supervisor escalation", icon: ShieldAlert },
+            { step: "4", label: "Citizen & supervisor notified", icon: User },
+          ].map((item) => (
+            <div key={item.step} className="flex items-start gap-2">
+              <div className="w-5 h-5 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                {item.step}
+              </div>
+              <span className="text-slate-600">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </OfficerLayout>
+  );
+}
