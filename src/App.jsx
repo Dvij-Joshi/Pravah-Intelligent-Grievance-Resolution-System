@@ -17,6 +17,7 @@ import SubmitGrievance from './pages/citizen/SubmitGrievance';
 import GrievanceSubmitted from './pages/citizen/GrievanceSubmitted';
 import TrackGrievance from './pages/citizen/TrackGrievance';
 import GrievanceDetails from './pages/citizen/GrievanceDetails';
+import ResolutionFeedback from './pages/citizen/ResolutionFeedback';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
@@ -75,6 +76,18 @@ function App() {
         grievanceId={trackGid}
         onBack={() => setView('track')}
         onTrack={() => setView('track')}
+        onVerify={() => setView('feedback')}
+      />
+    );
+  }
+
+  if (view === 'feedback') {
+    return (
+      <ResolutionFeedback
+        data={submittedData}
+        grievanceId={trackGid}
+        onBack={() => setView('details')}
+        onHome={() => setView('home')}
       />
     );
   }
