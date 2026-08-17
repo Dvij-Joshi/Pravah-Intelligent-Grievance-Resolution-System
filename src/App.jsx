@@ -5,6 +5,7 @@ import AllComplaints from "./pages/officer/AllComplaints";
 import ComplaintDetails from "./pages/officer/ComplaintDetails";
 import ActionWorkflow from "./pages/officer/ActionWorkflow";
 import EvidenceUpload from "./pages/officer/EvidenceUpload";
+import AIEvidenceReport from "./pages/officer/AIEvidenceReport";
 
 // Placeholder for screens not yet built
 const ComingSoon = ({ title }) => (
@@ -29,7 +30,7 @@ export default function App() {
         <Route path="/officer/complaints/:id" element={<ComplaintDetails />} />
         <Route path="/officer/workflow" element={<ActionWorkflow />} />
         <Route path="/officer/evidence" element={<EvidenceUpload />} />
-        <Route path="/officer/evidence-report" element={<ComingSoon title="AI Evidence Report" />} />
+        <Route path="/officer/evidence-report" element={<AIEvidenceReport />} />
         <Route path="/officer/escalations" element={<ComingSoon title="Escalations" />} />
       </Routes>
     </BrowserRouter>
