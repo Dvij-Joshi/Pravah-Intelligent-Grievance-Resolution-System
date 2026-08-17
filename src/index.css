@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0f4a8a; /* Professional Navy/Gov Blue */
+  --color-primary-dark: #0a3363; 
+  --color-primary-light: #1c64b5; 
+  --color-accent: #059669; /* Trustworthy Green for resolutions/success */
+  
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8fafc;
+  --color-border: #e2e8f0;
+  
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased overflow-x-hidden;
+  }
+}
+
+@layer utilities {
+  .card-panel {
+    @apply bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300;
+  }
+  
+  .text-brand {
+    @apply text-blue-900;
+  }
+  
+  .hero-bg {
+    background-color: #f8fafc;
+    background-image: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 100%);
+  }
+}
