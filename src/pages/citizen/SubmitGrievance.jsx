@@ -245,6 +245,26 @@ export default function SubmitGrievance() {
       return;
     }
 
+    // ── 3. Call AI Backend Pipeline ─────────────────────────────
+    try {
+      // Run Triage Agent
+      const triageRes = await fetch('http://localhost:3001/api/triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grievance: data })
+      });
+      const triageData = await triageRes.json();
+
+      // Run Resolution Planner Agent
+      await fetch('http://localhost:3001/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grievance: data, triageData })
+      });
+    } catch (apiErr) {
+      console.warn("AI Backend pipeline failed, but grievance was saved:", apiErr);
+    }
+
     navigate(`/submitted/${data.id}`);
   }
 

@@ -54,6 +54,11 @@ export function mapGrievance(g) {
     evidence_urls: g.evidence_urls || [],
     slaRemaining: computeSLA(g.created_at, g.status),
     slaStatus: computeSLAStatus(g.created_at, g.status),
+    ai_workflow: g.ai_workflow || null,
+    ai_triage_data: g.ai_triage_data || null,
+    ai_evidence_report: g.ai_evidence_report || null,
+    ai_verdict: g.ai_verdict || null,
+    created_at_raw: g.created_at
   };
 }
 
