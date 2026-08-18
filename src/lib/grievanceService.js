@@ -49,6 +49,8 @@ export function mapGrievance(g) {
         })
       : '—',
     description: g.description,
+    citizen: g.is_anonymous ? 'Anonymous Citizen' : (g.contact_name || 'Citizen'),
+    phone: g.is_anonymous ? 'Hidden' : (g.contact_phone || 'Not provided'),
     evidence_urls: g.evidence_urls || [],
     slaRemaining: computeSLA(g.created_at, g.status),
     slaStatus: computeSLAStatus(g.created_at, g.status),
