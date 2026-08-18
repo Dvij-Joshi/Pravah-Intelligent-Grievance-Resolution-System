@@ -18,131 +18,25 @@ import {
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge } from "../../components/Badges";
 
-// ── All action tasks across complaints ─────────────────────────────────────
-const initialTasks = [
-  {
-    id: "T-001",
-    grievanceId: "GRV-1031",
-    grievanceTitle: "Road damaged after recent heavy rain",
-    category: "Road Damage",
-    priority: "HIGH",
-    slaRemaining: "Overdue",
-    slaStatus: "overdue",
+import { useGrievances } from "../../hooks/useGrievances";
+
+const generateTasksFromGrievances = (grievances) => {
+  return grievances.map((g, index) => ({
+    id: `T-${g.dbId.substring(0, 6)}`,
+    grievanceId: g.id,
+    grievanceTitle: g.title,
+    category: g.category,
+    priority: g.priority,
+    slaRemaining: g.slaRemaining,
+    slaStatus: g.slaStatus,
     step: 1,
-    title: "Inspect damaged road section",
+    title: `Resolve grievance: ${g.title}`,
     responsible: "Field Team",
-    deadline: "09 May 2025, 02:00 PM",
+    deadline: g.slaRemaining,
     dependency: null,
-    status: "Overdue",
-  },
-  {
-    id: "T-002",
-    grievanceId: "GRV-1031",
-    grievanceTitle: "Road damaged after recent heavy rain",
-    category: "Road Damage",
-    priority: "HIGH",
-    slaRemaining: "Overdue",
-    slaStatus: "overdue",
-    step: 2,
-    title: "Estimate repair scope & cost",
-    responsible: "Roads Department",
-    deadline: "After inspection",
-    dependency: "T-001",
-    dependencyLabel: "Step 1: Inspect road",
-    status: "Overdue",
-  },
-  {
-    id: "T-003",
-    grievanceId: "GRV-1024",
-    grievanceTitle: "No water supply since 4 days",
-    category: "Water Supply",
-    priority: "HIGH",
-    slaRemaining: "4h left",
-    slaStatus: "critical",
-    step: 2,
-    title: "Inspect water pipeline",
-    responsible: "Field Team",
-    deadline: "10 May 2025, 09:00 PM",
-    dependency: null,
-    status: "In Progress",
-  },
-  {
-    id: "T-004",
-    grievanceId: "GRV-1024",
-    grievanceTitle: "No water supply since 4 days",
-    category: "Water Supply",
-    priority: "HIGH",
-    slaRemaining: "4h left",
-    slaStatus: "critical",
-    step: 3,
-    title: "Identify root cause",
-    responsible: "Water Department",
-    deadline: "After inspection",
-    dependency: "T-003",
-    dependencyLabel: "Step 2: Inspect pipeline",
-    status: "Pending",
-  },
-  {
-    id: "T-005",
-    grievanceId: "GRV-1029",
-    grievanceTitle: "Street light not working near government school",
-    category: "Street Light",
-    priority: "MEDIUM",
-    slaRemaining: "12h left",
-    slaStatus: "warning",
-    step: 1,
-    title: "Verify complaint location and light ID",
-    responsible: "Ward Officer",
-    deadline: "10 May 2025, 11:00 PM",
-    dependency: null,
-    status: "Pending",
-  },
-  {
-    id: "T-006",
-    grievanceId: "GRV-1019",
-    grievanceTitle: "Sewage overflow near residential area",
-    category: "Sewage",
-    priority: "HIGH",
-    slaRemaining: "Overdue",
-    slaStatus: "overdue",
-    step: 1,
-    title: "Deploy sewage pump team to site",
-    responsible: "Sanitation Team",
-    deadline: "08 May 2025, 06:00 PM",
-    dependency: null,
-    status: "Overdue",
-  },
-  {
-    id: "T-007",
-    grievanceId: "GRV-1027",
-    grievanceTitle: "Garbage not collected for 3 days",
-    category: "Garbage Collection",
-    priority: "LOW",
-    slaRemaining: "24h left",
-    slaStatus: "ok",
-    step: 1,
-    title: "Schedule garbage pickup for the lane",
-    responsible: "Sanitation Team",
-    deadline: "11 May 2025, 08:00 AM",
-    dependency: null,
-    status: "Pending",
-  },
-  {
-    id: "T-008",
-    grievanceId: "GRV-1024",
-    grievanceTitle: "No water supply since 4 days",
-    category: "Water Supply",
-    priority: "HIGH",
-    slaRemaining: "4h left",
-    slaStatus: "critical",
-    step: 1,
-    title: "Verify complaint location",
-    responsible: "Ward Officer",
-    deadline: "10 May 2025, 01:30 PM",
-    dependency: null,
-    status: "Completed",
-  },
-];
+    status: g.status === 'Resolved' ? 'Completed' : (g.status === 'In Progress' ? 'In Progress' : (g.slaStatus === 'overdue' ? 'Overdue' : 'Pending')),
+  }));
+};
 
 const STATUS_OPTIONS = ["Pending", "In Progress", "Completed", "Overdue"];
 
@@ -236,9 +130,16 @@ function StatusDropdown({ current, onChange }) {
 
 export default function ActionWorkflow() {
   const navigate = useNavigate();
-  const [tasks, setTasks] = useState(initialTasks);
+  const { grievances, loading } = useGrievances();
+  const [tasks, setTasks] = useState([]);
   const [activeTab, setActiveTab] = useState("All");
   const [expandedTask, setExpandedTask] = useState(null);
+
+  React.useEffect(() => {
+    if (grievances && grievances.length > 0) {
+      setTasks(generateTasksFromGrievances(grievances));
+    }
+  }, [grievances]);
 
   const updateStatus = (taskId, newStatus) => {
     setTasks((prev) =>
