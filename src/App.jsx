@@ -18,6 +18,7 @@ import GrievanceSubmitted from './pages/citizen/GrievanceSubmitted';
 import TrackGrievance from './pages/citizen/TrackGrievance';
 import GrievanceDetails from './pages/citizen/GrievanceDetails';
 import ResolutionFeedback from './pages/citizen/ResolutionFeedback';
+import CitizenDashboard from './pages/citizen/CitizenDashboard';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
@@ -35,10 +36,20 @@ function App() {
   const [submittedData, setSubmittedData] = useState(null);
   const [trackGid, setTrackGid] = useState(null);
 
+  if (view === 'dashboard') {
+    return (
+      <CitizenDashboard
+        onNewGrievance={() => setView('submit')}
+        onViewDetails={(gid) => { setTrackGid(gid); setView('details'); }}
+        onHome={() => setView('home')}
+      />
+    );
+  }
+
   if (view === 'submit') {
     return (
       <SubmitGrievance
-        onBack={() => setView('home')}
+        onBack={() => setView('dashboard')}
         onSuccess={(data) => {
           setSubmittedData(data);
           setView('submitted');
@@ -63,7 +74,7 @@ function App() {
         data={submittedData}
         grievanceId={trackGid}
         onBack={() => setView('submitted')}
-        onHome={() => setView('home')}
+        onHome={() => setView('dashboard')}
         onDetails={() => setView('details')}
       />
     );
@@ -108,8 +119,8 @@ function App() {
               <a href="#demo" className="text-slate-600 hover:text-blue-700 font-medium transition-colors">Demo</a>
             </div>
             <div>
-              <button onClick={() => setView('submit')} className="bg-blue-700 hover:bg-blue-800 text-white px-5 py-2 rounded-lg font-medium transition-colors shadow-sm">
-                Lodge a Grievance
+              <button onClick={() => setView('dashboard')} className="bg-blue-700 hover:bg-blue-800 text-white px-5 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                Access Portal
               </button>
             </div>
           </div>
@@ -139,7 +150,7 @@ function App() {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <button
-                onClick={() => setView('submit')}
+                onClick={() => setView('dashboard')}
                 className="bg-blue-700 hover:bg-blue-800 text-white px-8 py-3.5 rounded-xl font-semibold text-lg transition-colors shadow-sm flex items-center justify-center gap-2"
               >
                 Experience the MVP <ArrowRight className="h-5 w-5" />
@@ -161,7 +172,7 @@ function App() {
           <img 
             src="https://via.placeholder.com/1200x675?text=hero-dashboard.png" 
             alt="Click to experience the Pravah MVP" 
-            onClick={() => setView('submit')}
+            onClick={() => setView('dashboard')}
             className="rounded-2xl shadow-2xl border border-slate-200 object-cover w-full h-auto cursor-pointer hover:shadow-3xl transition-shadow duration-300"
           />
         </motion.div>
