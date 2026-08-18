@@ -21,59 +21,44 @@ import {
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 
-// ── Dummy AI Evidence Reports ──────────────────────────────────────────────
-const reports = [
-  {
-    grievanceId: "GRV-1024",
-    grievanceTitle: "No water supply since 4 days",
-    category: "Water Supply",
-    location: "Ward 5",
-    officerNote: "The field team identified a burst pipe in the main distribution line near the water tower. The pipe was repaired and water supply has been restored to all affected households.",
-    workOrderId: "WO-2025-05-1024",
-    submittedAt: "10 May 2025, 06:45 PM",
-    analysedAt: "10 May 2025, 06:47 PM",
-    agentModel: "Qwen 3.6 27B",
-    beforeImage: "https://via.placeholder.com/800x500?text=evidence-before.png+(Burst+Pipe)",
-    afterImage: "https://via.placeholder.com/800x500?text=evidence-after.png+(Repaired+Pipe)",
-    confidence: 91,
-    evidenceQuality: "GOOD",
-    changeDetected: true,
-    visualConsistency: true,
-    locationVerified: true,
-    timestampValid: true,
-    beforeObservation: "Visible water leakage from a cracked pipe section near the Ward 5 distribution node. Surrounding ground shows waterlogging and erosion marks consistent with prolonged leakage.",
-    afterObservation: "Pipe section appears to have been replaced. No visible leakage. The ground surrounding the repair site shows fresh concrete patching, consistent with standard repair procedure.",
-    concerns: [],
-    aiSummary: "The before and after images show a clear and verifiable change at the reported site. The repair is visually consistent with the officer's resolution note describing a burst pipe replacement. Location and timestamp metadata are valid.",
-    recommendation: "APPROVE",
-    recommendationNote: "Evidence quality is good. Visual change is clearly detectable and matches the reported resolution. Recommend sending to citizen for verification.",
-  },
-  {
-    grievanceId: "GRV-1038",
-    grievanceTitle: "Pothole outside government school",
-    category: "Road Damage",
-    location: "Ward 5",
-    officerNote: "Pothole was filled with fresh bituminous mix by the road maintenance team. Road surface levelled and compacted.",
-    workOrderId: "WO-2025-05-1038",
-    submittedAt: "08 May 2025, 04:30 PM",
-    analysedAt: "08 May 2025, 04:32 PM",
-    agentModel: "Qwen 3.6 27B",
-    beforeImage: "https://via.placeholder.com/800x500?text=evidence-before.png+(Pothole)",
-    afterImage: "https://via.placeholder.com/800x500?text=evidence-after.png+(Repaired+Road)",
-    confidence: 88,
-    evidenceQuality: "GOOD",
-    changeDetected: true,
-    visualConsistency: true,
-    locationVerified: true,
-    timestampValid: true,
-    beforeObservation: "Large pothole clearly visible on asphalt road surface. Depth and width are consistent with a safety hazard. Surrounding road surface shows cracking.",
-    afterObservation: "Pothole is no longer visibly present. Road surface appears to have been patched with fresh asphalt. Patch boundaries are visible, consistent with a standard repair.",
-    concerns: ["Patch edges not perfectly blended — minor cosmetic issue only"],
-    aiSummary: "Clear visual change detected between before and after images. The repair is consistent with the officer report. One minor concern noted regarding patch edge quality, but this does not affect the structural resolution.",
-    recommendation: "APPROVE",
-    recommendationNote: "Evidence is sufficient to confirm resolution. Minor concern noted but does not affect validity. Recommend citizen verification.",
-  },
-];
+import { useGrievances } from "../../hooks/useGrievances";
+
+const generateReportsFromGrievances = (grievances) => {
+  if (!grievances || grievances.length === 0) return [];
+  
+  // For demo, generate an AI report for up to 3 grievances
+  return grievances.slice(0, 3).map((g, index) => {
+    const isWater = g.category === 'Water Supply';
+    const isRoad = g.category === 'Road Damage';
+    
+    return {
+      grievanceId: g.id,
+      grievanceTitle: g.title,
+      category: g.category,
+      location: g.location,
+      officerNote: isWater ? "Repaired the burst pipe and restored supply." : isRoad ? "Pothole filled with fresh bituminous mix." : "Issue addressed as per standard protocol.",
+      workOrderId: `WO-2025-${g.dbId.substring(0,4).toUpperCase()}`,
+      submittedAt: g.submitted,
+      analysedAt: "Just now",
+      agentModel: "Qwen 3.6 27B",
+      beforeImage: "https://via.placeholder.com/800x500?text=evidence-before.png",
+      afterImage: "https://via.placeholder.com/800x500?text=evidence-after.png",
+      confidence: 90 - index * 2,
+      evidenceQuality: "GOOD",
+      changeDetected: true,
+      visualConsistency: true,
+      locationVerified: true,
+      timestampValid: true,
+      beforeObservation: `Visible issue reported at ${g.location}.`,
+      afterObservation: `The area shows clear signs of recent repair/resolution matching the officer's notes.`,
+      concerns: index === 1 ? ["Minor cosmetic inconsistencies detected"] : [],
+      aiSummary: `Clear visual change detected between before and after images for ${g.title}. The repair is consistent with the officer report.`,
+      recommendation: "APPROVE",
+      recommendationNote: "Evidence is sufficient to confirm resolution. Recommend citizen verification.",
+    };
+  });
+};
+
 
 const confidenceColor = (score) => {
   if (score >= 85) return { ring: "text-emerald-600", bg: "bg-emerald-50", bar: "bg-emerald-500", label: "High Confidence", labelColor: "text-emerald-700", labelBg: "bg-emerald-100 border-emerald-200" };
@@ -147,8 +132,32 @@ function CheckRow({ label, value, positive = true }) {
 
 export default function AIEvidenceReport() {
   const navigate = useNavigate();
-  const [selectedId, setSelectedId] = useState("GRV-1024");
+  const { grievances } = useGrievances();
+  const [reports, setReports] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [compareMode, setCompareMode] = useState(false);
+
+  React.useEffect(() => {
+    if (grievances && grievances.length > 0) {
+      const genReports = generateReportsFromGrievances(grievances);
+      setReports(genReports);
+      if (genReports.length > 0) {
+        setSelectedId(genReports[0].grievanceId);
+      }
+    }
+  }, [grievances]);
+
+  if (!reports || reports.length === 0 || !selectedId) {
+    return (
+      <OfficerLayout>
+        <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+          <Sparkles className="h-12 w-12 mb-4 text-slate-300" />
+          <h2 className="text-lg font-bold text-slate-600">No AI Reports Available</h2>
+          <p className="text-sm">There are no grievances with uploaded evidence to analyze yet.</p>
+        </div>
+      </OfficerLayout>
+    );
+  }
 
   const report = reports.find((r) => r.grievanceId === selectedId) || reports[0];
   const cfg = confidenceColor(report.confidence);
