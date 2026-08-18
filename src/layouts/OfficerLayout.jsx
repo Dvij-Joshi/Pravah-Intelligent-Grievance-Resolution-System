@@ -18,13 +18,13 @@ import {
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/officer' },
-  { label: 'All Complaints', icon: ClipboardList, path: '/officer/complaints' },
-  { label: 'Action Workflow', icon: GitPullRequest, path: '/officer/action-workflow' },
-  { label: 'Evidence Upload', icon: Upload, path: '/officer/upload-evidence' },
-  { label: 'AI Evidence Report', icon: FileCheck, path: '/officer/evidence-report' },
-  { label: 'Escalations', icon: AlertTriangle, path: '/officer/escalations' },
-  { label: 'Test AI Agents', icon: Bot, path: '/officer/test-agents' }
+  { label: "Dashboard",        icon: LayoutDashboard, path: "/officer/dashboard" },
+  { label: "All Complaints",   icon: ClipboardList,   path: "/officer/complaints" },
+  { label: "Action Workflow",  icon: GitPullRequest,  path: "/officer/workflow" },
+  { label: "Evidence Upload",  icon: Upload,          path: "/officer/evidence" },
+  { label: "AI Evidence Report", icon: FileCheck,     path: "/officer/evidence-report" },
+  { label: "Escalations",      icon: AlertTriangle,   path: "/officer/escalations" },
+  { label: "Test AI Agents",   icon: Bot,             path: "/officer/test-agents" }
 ];
 
 export default function OfficerLayout({ children }) {
