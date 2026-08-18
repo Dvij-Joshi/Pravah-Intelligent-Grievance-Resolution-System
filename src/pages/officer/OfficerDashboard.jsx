@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import { motion } from "framer-motion";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge, StatusBadge } from "../../components/Badges";
 import { useGrievances } from "../../hooks/useGrievances";
+import { useAuth } from "../../context/AuthContext";
 
 
 const FadeIn = ({ children, delay = 0, className = "" }) => (
@@ -40,7 +41,13 @@ const activityIcons = {
 
 export default function OfficerDashboard() {
   const navigate = useNavigate();
+  const { role } = useAuth();
   const { grievances, loading, error, refetch } = useGrievances();
+
+  // Role guard — citizens don't belong here
+  useEffect(() => {
+    if (role === 'citizen') navigate('/dashboard', { replace: true });
+  }, [role, navigate]);
 
   const stats = useMemo(() => ({
     assigned: grievances.filter(g => g.status !== 'Resolved').length,

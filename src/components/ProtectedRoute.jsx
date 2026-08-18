@@ -3,22 +3,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 /**
- * ProtectedRoute
- *
- * Props:
- *   children     — page to render when authorised
- *   requireRole  — 'officer' | 'citizen' | undefined (any authenticated user)
- *
- * Behaviour:
- *   • While auth is loading → spinner (never redirect on transient null role)
- *   • Not logged in        → /login
- *   • Wrong role (and role is resolved) → correct home for that role
- *   • Otherwise            → render children
+ * ProtectedRoute — only enforces authentication (logged in or not).
+ * Role-based redirects are handled inside each portal's own page.
  */
-export default function ProtectedRoute({ children, requireRole }) {
-  const { user, role, loading } = useAuth();
+export default function ProtectedRoute({ children }) {
+  const { user, loading, role } = useAuth();
 
-  // Always wait until both user AND role are fully resolved
+  // Show spinner while auth + role are resolving
   if (loading || (user && role === null)) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -33,15 +24,7 @@ export default function ProtectedRoute({ children, requireRole }) {
     );
   }
 
-  // Not logged in
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Role resolved and doesn't match — send to correct home
-  if (requireRole && role !== requireRole) {
-    return <Navigate to={role === 'officer' ? '/officer/dashboard' : '/dashboard'} replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
 
   return children;
 }

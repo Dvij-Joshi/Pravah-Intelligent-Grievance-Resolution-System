@@ -37,7 +37,12 @@ function statusLabel(status) {
 
 export default function CitizenDashboard() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
+
+  // Role guard — officers don't belong here
+  useEffect(() => {
+    if (role === 'officer') navigate('/officer/dashboard', { replace: true });
+  }, [role, navigate]);
 
   const [profile, setProfile] = useState(null);
   const [grievances, setGrievances] = useState([]);
