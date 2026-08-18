@@ -8,33 +8,38 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
-  const [role, setRole] = useState(null); // 'citizen' | 'officer'
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch profile + role for a given user
-  const fetchRole = async (userId) => {
-    if (!userId) { setRole(null); return; }
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single();
-    setRole(data?.role ?? 'citizen');
+  // Fetch session + role in ONE parallel round — no sequential waiting
+  const initAuth = async (supabaseSession) => {
+    setSession(supabaseSession);
+    const currentUser = supabaseSession?.user ?? null;
+    setUser(currentUser);
+
+    if (currentUser) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', currentUser.id)
+        .single();
+      setRole(data?.role ?? 'citizen');
+    } else {
+      setRole(null);
+    }
+
+    setLoading(false);
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      await fetchRole(session?.user?.id);
-      setLoading(false);
+    // Get current session immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      initAuth(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      await fetchRole(session?.user?.id);
-      setLoading(false);
+    // Listen for auth changes (login / logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      initAuth(session);
     });
 
     return () => subscription.unsubscribe();
@@ -51,9 +56,11 @@ export const AuthProvider = ({ children }) => {
     signOut: () => supabase.auth.signOut(),
   };
 
+  // Always render children — let ProtectedRoute handle the loading state display.
+  // Never block the whole app tree with a loading gate here.
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
