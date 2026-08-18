@@ -23,22 +23,40 @@ export default function LoginPage() {
     }
     setIsLoading(true);
     setError('');
-    const { error: authError, data } = await signIn({ email, password });
-    setIsLoading(false);
-    if (authError) {
-      setError(authError.message === 'Invalid login credentials'
-        ? 'Invalid email or password. Please try again.'
-        : authError.message);
-    } else {
-      // Fetch role directly so we don't depend on stale context
-      const userId = data?.user?.id;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      const userRole = profile?.role ?? 'citizen';
+
+    try {
+      const { error: authError, data } = await signIn({ email, password });
+
+      if (authError) {
+        setError(
+          authError.message === 'Invalid login credentials'
+            ? 'Invalid email or password. Please try again.'
+            : authError.message
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch role — if it fails for any reason, default to citizen
+      let userRole = 'citizen';
+      try {
+        const userId = data?.user?.id;
+        if (userId) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', userId)
+            .single();
+          userRole = profile?.role ?? 'citizen';
+        }
+      } catch (_) {
+        // Role fetch failed — default to citizen, don't block login
+      }
+
       navigate(userRole === 'officer' ? '/officer/dashboard' : '/dashboard');
+    } catch (err) {
+      setError('Something went wrong. Please try again.');
+      setIsLoading(false);
     }
   }
 
