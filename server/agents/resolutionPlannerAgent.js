@@ -25,7 +25,7 @@ Triage SLA: ${triageData.estimated_sla_hours} hours`;
       { role: "system", content: "You output only valid JSON. Calculate the sla_deadline from the current time plus the estimated_sla_hours." },
       { role: "user", content: prompt }
     ],
-    model: "llama-3.3-70b-versatile",
+    model: "openai/gpt-oss-120b",
     temperature: 0.1,
     response_format: { type: "json_object" }
   });

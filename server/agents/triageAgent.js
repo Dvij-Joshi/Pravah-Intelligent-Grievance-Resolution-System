@@ -24,7 +24,7 @@ Reported Category: ${grievance.category}`;
       { role: "system", content: "You output only valid JSON. No markdown formatting or extra text." },
       { role: "user", content: prompt }
     ],
-    model: "llama-3.3-70b-versatile",
+    model: "openai/gpt-oss-120b",
     temperature: 0.1,
     response_format: { type: "json_object" }
   });

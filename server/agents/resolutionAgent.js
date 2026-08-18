@@ -26,7 +26,7 @@ Evidence Agent Concerns: ${evidenceReport.concerns?.join(', ') || 'None'}`;
       { role: "system", content: "You output only valid JSON. If the recommendation is APPROVE and confidence > 70, verdict should be VERIFIED. Otherwise FAILED." },
       { role: "user", content: prompt }
     ],
-    model: "llama-3.3-70b-versatile",
+    model: "openai/gpt-oss-120b",
     temperature: 0.1,
     response_format: { type: "json_object" }
   });
