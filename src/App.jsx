@@ -53,6 +53,7 @@ export default function App() {
           <Route path="/officer/evidence"        element={<ProtectedRoute><EvidenceUpload /></ProtectedRoute>} />
           <Route path="/officer/evidence-report" element={<ProtectedRoute><AIEvidenceReport /></ProtectedRoute>} />
           <Route path="/officer/escalations"     element={<ProtectedRoute><Escalations /></ProtectedRoute>} />
+          <Route path="/officer/test-agents"     element={<ProtectedRoute><TestAIAgents /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
