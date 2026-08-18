@@ -1,0 +1,566 @@
+Absolutely. At this point, I would define the internal hackathon MVP as one complete, 
+demonstrable journey rather than a collection of disconnected AI features. 
+Smart Grievance Resolution Automation 
+— MVP 
+Core idea 
+A multi-agent AI system that takes a citizen grievance from submission to 
+verified resolution, while automatically planning actions, monitoring 
+progress, checking evidence, escalating delays, and detecting recurrence. 
+The important distinction is: 
+We are NOT building another complaint-classification system. 
+We are building the intelligent resolution layer after a grievance enters the system. 
+ 
+1. Complete MVP Architecture 
+                        CITIZEN 
+                            │ 
+                            ▼ 
+                  ┌──────────────────┐ 
+                  │  CITIZEN PORTAL  │ 
+                  │                  │ 
+                  │ Complaint        │ 
+                  │ Location         │ 
+                  │ Image / Evidence │ 
+                  └────────┬─────────┘ 
+                           │ 
+                           ▼ 
+                  ┌──────────────────┐ 
+                  │  TRIAGE AGENT    │ 
+                  │  GPT-OSS 120B    │ 
+                  └────────┬─────────┘ 
+                           │ 
+                  Structured grievance 
+                           │ 
+                           ▼ 
+              ┌────────────────────────┐ 
+              │ RESOLUTION PLANNER     │ 
+              │ AGENT                  │ 
+              │ GPT-OSS 120B           │ 
+              └───────────┬────────────┘ 
+                          │ 
+                    Action Workflow 
+                          │ 
+             ┌────────────┼─────────────┐ 
+             ▼            ▼             ▼ 
+          Officer       SLA          Dependency 
+           Tasks        Engine          Tracking 
+             │            │             │ 
+             └────────────┼─────────────┘ 
+                          │ 
+                          ▼ 
+                  Officer performs 
+                       actions 
+                          │ 
+                          ▼ 
+                 Upload Resolution 
+                      Evidence 
+                          │ 
+                          ▼ 
+              ┌────────────────────────┐ 
+              │   EVIDENCE AGENT       │ 
+              │   Qwen 3.6 27B         │ 
+              │                        │ 
+              │ Before + After images  │ 
+              └───────────┬────────────┘ 
+                          │ 
+                  Evidence Report 
+                          │ 
+                          ▼ 
+              ┌────────────────────────┐ 
+              │ RESOLUTION AGENT       │ 
+              │ GPT-OSS 120B           │ 
+              └───────────┬────────────┘ 
+                          │ 
+                 ┌────────┴────────┐ 
+                 ▼                 ▼ 
+             VERIFIED           FAILED 
+                 │                 │ 
+                 ▼                 ▼ 
+             Citizen           Reopen / 
+             confirms          Escalate 
+                 │ 
+                 ▼ 
+              CLOSED 
+                 │ 
+                 ▼ 
+         Recurrence Detection 
+                 │ 
+                 ▼ 
+          Systemic Issue 
+             Detection 
+ 
+ 
+2. Step 1 — Citizen submits grievance 
+The citizen opens the web portal. 
+They see something simple: 
+"Tell us what happened." 
+Example: 
+"There has been no water supply in Ward 5 for four days. Many houses are 
+affected." 
+They can optionally provide: 
+● Location 
+● Photo 
+● Video 
+● Document 
+● Contact information 
+For the MVP, text + image + location is enough. 
+ 
+3. Step 2 — Triage Agent 
+Agent: TriageAgent 
+Model: GPT-OSS 120B 
+The raw complaint goes to the first AI agent. 
+It converts unstructured language into structured information. 
+For example: 
+{ 
+} 
+"summary": "Water supply unavailable in Ward 5 for four days", 
+"department": "Water Supply", 
+"category": "Water disruption", 
+"location": "Ward 5", 
+"priority": "HIGH", 
+"affected_population": "Multiple households", 
+"urgency_reason": [ 
+"Essential service disruption", 
+"Multiple citizens affected", 
+"Four-day duration" 
+] 
+The important part is that the AI doesn't directly change the database. 
+It produces structured output. 
+Your backend validates and stores it. 
+4. Step 3 — Resolution Planner Agent 
+Agent: ResolutionPlannerAgent 
+Model: GPT-OSS 120B 
+This is where your project starts becoming different from a normal AI chatbot. 
+The agent asks: 
+"What actually needs to happen to resolve this?" 
+It generates an executable action plan. 
+Example: 
+GRIEVANCE: GRV-1024 
+ 
+1. Verify complaint location 
+   Responsible: Ward Officer 
+   Deadline: 4 hours 
+ 
+2. Inspect water pipeline 
+   Responsible: Field Team 
+   Deadline: 12 hours 
+ 
+3. Identify cause 
+   Responsible: Water Department 
+   Dependency: Inspection 
+ 
+4. Repair fault 
+   Responsible: Maintenance Team 
+   Dependency: Cause identified 
+ 
+5. Upload resolution evidence 
+   Required: 
+   - Before image 
+   - After image 
+   - Location 
+   - Timestamp 
+ 
+6. Citizen verification 
+ 
+Now the complaint is no longer just: 
+"Pending." 
+It has become a workflow. 
+ 
+5. Step 4 — Officer Dashboard 
+The officer doesn't need to read every raw complaint. 
+Their dashboard shows: 
+TODAY 
+127 Active Cases 
+18  SLA At Risk 
+9   Overdue 
+12  High Priority 
+6   Awaiting Evidence 
+4   Reopened 
+And the individual case: 
+GRV-1024 
+Water Supply 
+Ward 5 
+Priority: HIGH 
+SLA: 18 hours remaining 
+Current Action: 
+Field inspection 
+Recommended Action: 
+Assign Ward 5 field team 
+The officer can execute each task from the dashboard. 
+6. Step 5 — SLA & Automation Engine 
+This part does not need to be an LLM. 
+Your backend knows: 
+Created:       
+SLA:           
+10:00 AM 
+48 hours 
+Current time:  40 hours 
+Therefore: 
+8 hours remaining 
+You can use deterministic rules + optionally an AI explanation. 
+For example: 
+SLA Risk = HIGH 
+Reasons: 
+• No field inspection recorded 
+• 40 hours elapsed 
+• Dependency unresolved 
+• Similar cases historically delayed 
+7. Step 6 — Automatic Escalation 
+Suppose no action happens. 
+Instead of waiting for the officer to notice: 
+40 hours 
+↓ 
+SLA risk detected 
+↓ 
+Officer reminder 
+↓ 
+No action 
+↓ 
+Supervisor escalation 
+↓ 
+Citizen status update 
+The system automatically performs the configured action. 
+For the demo, this can be triggered by a simulated clock or a button such as: 
+Simulate 24 hours 
+That lets the judges actually see the automation happen. 
+8. Step 7 — Officer resolves the complaint 
+Eventually the officer says: 
+"Water supply restored." 
+But here's the important part: 
+We don't immediately close the complaint. 
+Instead: 
+Submit Resolution Evidence 
+The officer uploads: 
+● Before image 
+● After image 
+● Resolution note 
+● Work-order ID 
+● Location 
+● Timestamp 
+9. Step 8 — Evidence Agent 
+Agent: EvidenceAgent 
+Model: Qwen 3.6 27B 
+This is our vision agent. 
+It receives: 
+Original complaint 
++ 
+Before image 
++ 
+After image 
++ 
+Officer resolution note 
+It analyzes what changed. 
+For example: 
+Before 
+Large pothole clearly visible. 
+After 
+Road surface appears repaired. 
+The agent generates: 
+{ 
+} 
+"before_observation": "Large pothole visible on road", 
+"after_observation": "Pothole no longer visibly present", 
+"change_detected": true, 
+"evidence_quality": "GOOD", 
+"visual_consistency": true, 
+"confidence": 0.91, 
+"concerns": [] 
+This becomes the AI Evidence Report. 
+10. Step 9 — Resolution Agent 
+Agent: ResolutionAgent 
+Model: GPT-OSS 120B 
+This agent receives everything: 
+Original grievance 
++ 
+AI analysis 
++ 
+Action plan 
++ 
+Officer completion report 
++ 
+Evidence Agent report 
++ 
+Location 
++ 
+Timestamp 
++ 
+Citizen feedback 
+It makes a recommendation. 
+Example: 
+RESOLUTION REVIEW 
+AI Confidence: 91% 
+✓ Complaint matches action 
+✓ Required action completed 
+✓ Before/after evidence supports repair 
+✓ Location verified 
+✓ Timestamp valid 
+Recommendation: 
+APPROVE FOR CITIZEN VERIFICATION 
+Notice the wording: 
+It recommends. 
+It doesn't have unrestricted authority to declare a government case solved. 
+11. Step 10 — Citizen verification 
+The citizen gets: 
+Your grievance has been marked as resolved. 
+Is the issue actually fixed? 
+Options: 
+YES — RESOLVED 
+PARTIALLY RESOLVED 
+NO — STILL EXISTS 
+12. If citizen says YES 
+The system completes: 
+Resolution Agent 
+↓ 
+Evidence verified 
+↓ 
+Citizen confirmed 
+↓ 
+Case CLOSED 
+The complete audit trail is saved. 
+13. If citizen says NO 
+This is one of the most important parts of the MVP. 
+The citizen says: 
+"Water supply is still unavailable." 
+The system does not create a completely new complaint. 
+Instead: 
+Citizen rejects resolution 
+          ↓ 
+Existing case REOPENED 
+          ↓ 
+Officer notified 
+          ↓ 
+Supervisor notified 
+          ↓ 
+New action generated 
+          ↓ 
+Escalation if necessary 
+ 
+This directly tackles the cycle: 
+Complaint → fake/insufficient closure → citizen files again → duplicate. 
+ 
+14. Step 11 — Recurrence Agent 
+Agent: RecurrenceAgent 
+After cases accumulate, the system checks for related grievances. 
+This doesn't need to be an LLM-heavy operation. 
+Use: 
+Embeddings + vector similarity + location + time 
+Then use the LLM to explain the pattern. 
+Example: 
+GRV-1024 
+No water Ward 5 
+ 
+GRV-1041 
+Water pressure low Ward 5 
+GRV-1088 
+No water since Monday Ward 5 
+GRV-1121 
+Pipeline problem Ward 5 
+System detects: 
+Potential recurring issue 
+15. Step 12 — Systemic Issue Alert 
+The officer/admin dashboard shows: 
+SYSTEMIC ISSUE DETECTED 
+Ward 5 — Water Supply 
+37 related complaints 
+12 locations 
+6 repeat complaints 
+4 previous closures 
+Recurrence: HIGH 
+Average resolution: 8.4 days 
+AI recommendation: 
+"The recurrence pattern suggests an infrastructure-level issue rather than 
+independent citizen complaints. Recommend field inspection of the Ward 5 
+distribution network." 
+This is where individual grievance management becomes proactive governance. 
+16. The Multi-Agent System 
+For the internal MVP, I'd use four primary agents. 
+Agent 
+Triage Agent 
+Model 
+GPT-OSS 
+120B 
+Job 
+Understand & structure grievance 
+Resolution 
+Planner 
+Evidence Agent 
+Resolution Agent 
+GPT-OSS 
+120B 
+Generate action workflow 
+Qwen 3.6 27B Analyze before/after evidence 
+GPT-OSS 
+120B 
+Decide whether evidence supports 
+resolution 
+Then add these as secondary automation: 
+Component 
+SLA Engine 
+Escalation 
+Engine 
+Similarity Engine 
+Recurrence 
+Agent 
+Notifications 
+Audit Trail 
+Technology 
+Backend rules 
+Backend workflow 
+Embeddings + vector DB 
+Embeddings + LLM 
+Backend 
+Database 
+This keeps the architecture agentic without becoming unnecessarily complicated. 
+17. What each agent actually receives 
+This is important for implementation. 
+Triage Agent 
+INPUT 
+Raw complaint 
+Optional location 
+Optional image 
+OUTPUT 
+Structured grievance JSON 
+↓ 
+Resolution Planner 
+INPUT 
+Structured grievance 
+OUTPUT 
+Action-plan JSON 
+↓ 
+Backend 
+Stores actions 
+Assigns tasks 
+Tracks SLA 
+↓ 
+Evidence Agent 
+INPUT 
+Original complaint 
+Before image 
+After image 
+Officer note 
+OUTPUT 
+Evidence report JSON 
+↓ 
+Resolution Agent 
+INPUT 
+Complaint 
+Action plan 
+Evidence report 
+Officer report 
+Metadata 
+OUTPUT 
+Resolution recommendation JSON 
+↓ 
+Recurrence Agent 
+INPUT 
+Historical complaints 
+Similarity results 
+Location 
+Time 
+Resolution history 
+OUTPUT 
+Recurring/systemic issue report 
+18. The database 
+For the MVP, you don't need a huge database architecture. 
+Something like: 
+users 
+complaints 
+complaint_analysis 
+action_tasks 
+evidence 
+evidence_reports 
+officers 
+escalations 
+citizen_feedback 
+complaint_relations 
+notifications 
+audit_logs 
+The most important relationship is: 
+Complaint 
+│ 
+├── Analysis 
+│ 
+├── Action Tasks 
+│ 
+├── Evidence 
+│ 
+├── Escalations 
+│ 
+├── Citizen Feedback 
+│ 
+└── Related Complaints 
+19. What the final demo should look like 
+I'd make the entire internal hackathon demo revolve around one complaint. 
+1. Citizen 
+"There's a huge pothole outside the government school in Ward 5." 
+Uploads photo. 
+↓ 
+2. Triage Agent 
+Road Infrastructure 
+Ward 5 
+HIGH 
+Safety-related 
+↓ 
+3. Resolution Planner 
+Verify 
+↓ 
+Inspect 
+↓ 
+Repair 
+↓ 
+Upload evidence 
+↓ 
+Citizen verification 
+↓ 
+4. Officer Dashboard 
+Shows: 
+SLA Risk: 78% 
+↓ 
+5. Automatic escalation 
+No action → supervisor notified. 
+↓ 
+6. Officer repairs pothole 
+Uploads before/after images. 
+↓ 
+7. Evidence Agent 
+91% confidence that the pothole was repaired. 
+↓ 
+8. Resolution Agent 
+Evidence sufficient → send for citizen verification. 
+↓ 
+9. Citizen 
+Yes, resolved. 
+↓ 
+10. Later... 
+System detects: 
+12 similar pothole complaints around Ward 5. 
+↓ 
+11. Systemic Alert 
+Potential road infrastructure problem detected. 
+And now your demo ends with: 
+"We didn't just close one complaint. We used its entire lifecycle to prevent the 
+next ten." 
+20. What is actually "Smart Automation" 
+here? 
+This is the most important thing for your presentation. 
+You're automating five things: 
+Understand 
+AI converts messy human language into structured information. 
+Plan 
+AI creates the required resolution workflow. 
+Monitor 
+The system watches deadlines, dependencies and actions. 
+Intervene 
+The system automatically reminds and escalates when things get stuck. 
+Verify 
+AI checks evidence and citizen feedback before closure. 
+And then: 
+Learn 
+The system detects recurring problems and converts individual complaints into systemic alerts. 
+So the final concept becomes: 
+Understand → Plan → Act → Monitor → Intervene → Verify → Learn 
+That is the complete MVP. 
+And for the internal hackathon, I would prioritize getting this one lifecycle working end-to-end 
+over adding multilingual voice, WhatsApp, fancy maps, 20 analytics charts, or other peripheral 
+features. If the judges can submit one complaint and watch the system intelligently carry it all 
+the way to verified resolution + systemic insight, they'll immediately understand what makes 
+the project different. 

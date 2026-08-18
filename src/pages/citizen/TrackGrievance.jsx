@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, ArrowLeft, Clock, MapPin, User, Zap,
   CheckCircle2, Circle, AlertTriangle, ChevronRight,
   Bell, TrendingUp, FileSearch, GitBranch, BarChart2,
-  AlertOctagon, RefreshCw, Activity,
+  AlertOctagon, RefreshCw, Activity, Loader2,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 // ─── Mock data factory ────────────────────────────────────────────────────────
 function buildGrievanceState(data, gid) {
@@ -121,15 +123,35 @@ function AgentPipeline({ stage }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDetails }) {
-  const gid = grievanceId || "GRV-1024";
-  const [state, setState] = useState(() => buildGrievanceState(data, gid));
+export default function TrackGrievance() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [grievance, setGrievance] = useState(null);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchGrievance() {
+      const { data } = await supabase.from('grievances').select('*').eq('id', id).single();
+      setGrievance(data);
+      setDbLoading(false);
+    }
+    fetchGrievance();
+  }, [id]);
+
+  const gid = grievance?.readable_id || 'GRV-XXXX';
+  const state = buildGrievanceState(grievance, gid);
   const [hoursElapsed, setHoursElapsed] = useState(2);
   const [agentStage, setAgentStage] = useState(1);
   const [isSimulating, setIsSimulating] = useState(false);
   const [escalated, setEscalated] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [activeTab, setActiveTab] = useState("plan");
+  const [localState, setLocalState] = useState(null);
+
+  useEffect(() => {
+    if (grievance) setLocalState(buildGrievanceState(grievance, grievance.readable_id));
+  }, [grievance]);
 
   function pushNotif(msg, type = "info") {
     const id = Date.now();
@@ -156,7 +178,7 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDe
     pushNotif("🔔 Supervisor notified: Rahul Sharma has not filed inspection", "warn");
 
     // Advance action plan — step 2 completes
-    setState(prev => ({
+    setLocalState(prev => prev ? ({
       ...prev,
       actionPlan: prev.actionPlan.map(t =>
         t.id === 2 ? { ...t, status: "done" } :
@@ -167,7 +189,7 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDe
         { time: "now", event: "Pipeline inspection completed by Field Team", type: "action" },
         ...prev.timeline,
       ],
-    }));
+    }) : prev);
 
     await new Promise(r => setTimeout(r, 800));
     setAgentStage(2);
@@ -194,6 +216,14 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDe
     { id: "timeline", label: "Timeline",     icon: Clock },
     { id: "ai",       label: "AI Pipeline",  icon: Zap },
   ];
+
+  if (dbLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -222,7 +252,7 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDe
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={onBack}
+            <button type="button" onClick={() => navigate(-1)}
               className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -232,12 +262,10 @@ export default function TrackGrievance({ data, grievanceId, onBack, onHome, onDe
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {onDetails && (
-              <button onClick={onDetails}
-                className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-all hover:bg-blue-100">
-                View Details
-              </button>
-            )}
+            <button onClick={() => navigate(`/grievance/${id}`)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-all hover:bg-blue-100">
+              View Details
+            </button>
             <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
               Citizen Portal
             </span>

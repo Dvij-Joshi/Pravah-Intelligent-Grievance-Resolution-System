@@ -1,4 +1,5 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck,
@@ -14,11 +15,10 @@ import {
   FileText,
   Video,
   Info,
-  User,
-  Phone,
-  Mail,
   CheckCircle2,
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -36,6 +36,11 @@ const CATEGORIES = [
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILES = 5;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'application/pdf'];
+
+function generateReadableId() {
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `GRV-${num}`;
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -80,11 +85,7 @@ function FileCard({ file, onRemove }) {
       className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 group"
     >
       {preview ? (
-        <img
-          src={preview}
-          alt={file.name}
-          className="w-10 h-10 rounded object-cover flex-shrink-0 border border-slate-200"
-        />
+        <img src={preview} alt={file.name} className="w-10 h-10 rounded object-cover flex-shrink-0 border border-slate-200" />
       ) : (
         <div className="w-10 h-10 rounded bg-white border border-slate-200 flex items-center justify-center flex-shrink-0">
           {icon}
@@ -109,49 +110,39 @@ function FileCard({ file, onRemove }) {
 function CharCounter({ value, max }) {
   const pct = (value.length / max) * 100;
   const color = pct >= 90 ? 'text-red-500' : pct >= 70 ? 'text-amber-500' : 'text-slate-400';
-  return (
-    <span className={`text-xs font-mono ${color}`}>
-      {value.length}/{max}
-    </span>
-  );
+  return <span className={`text-xs font-mono ${color}`}>{value.length}/{max}</span>;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function SubmitGrievance({ onBack, onSuccess }) {
+export default function SubmitGrievance() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
 
+  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
   const [files, setFiles] = useState([]);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [isAnonymous, setIsAnonymous] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [fileError, setFileError] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   function validate() {
     const errs = {};
+    if (!title.trim() || title.trim().length < 5) {
+      errs.title = 'Please enter a title (at least 5 characters).';
+    }
     if (!description.trim() || description.trim().length < 20) {
       errs.description = 'Please describe the issue in at least 20 characters.';
     }
     if (!location.trim()) {
       errs.location = 'Please enter the location of the issue.';
-    }
-    if (!isAnonymous) {
-      if (!name.trim()) errs.name = 'Name is required.';
-      if (phone && !/^[6-9]\d{9}$/.test(phone)) {
-        errs.phone = 'Enter a valid 10-digit Indian mobile number.';
-      }
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        errs.email = 'Enter a valid email address.';
-      }
     }
     return errs;
   }
@@ -201,15 +192,60 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
     if (Object.keys(errs).length > 0) return;
 
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1800));
+    setSubmitError('');
+
+    const readableId = generateReadableId();
+
+    // ── 1. Upload evidence files to Supabase Storage ──────────────────────────
+    const evidenceUrls = [];
+
+    if (files.length > 0) {
+      for (const file of files) {
+        // Path: evidence/{user_id}/{readableId}/{filename}
+        const ext = file.name.split('.').pop();
+        const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const path = `${user.id}/${readableId}/${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('evidence')
+          .upload(path, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          console.warn('File upload failed:', file.name, uploadError.message);
+          continue; // skip this file but don't block submission
+        }
+
+        // Get the public URL
+        const { data: urlData } = supabase.storage
+          .from('evidence')
+          .getPublicUrl(path);
+
+        evidenceUrls.push(urlData.publicUrl);
+      }
+    }
+
+    // ── 2. Insert grievance row with evidence URLs ─────────────────────────────
+    const { data, error } = await supabase.from('grievances').insert({
+      user_id: user.id,
+      readable_id: readableId,
+      title: title.trim(),
+      description: description.trim(),
+      category: category || 'Other',
+      location: location.trim(),
+      status: 'submitted',
+      priority: 'medium',
+      evidence_urls: evidenceUrls,
+    }).select().single();
+
     setIsSubmitting(false);
-    onSuccess?.({
-      description,
-      category,
-      location,
-      files,
-      contact: isAnonymous ? null : { name, phone, email },
-    });
+
+    if (error) {
+      setSubmitError('Failed to submit grievance. Please try again.');
+      console.error(error);
+      return;
+    }
+
+    navigate(`/submitted/${data.id}`);
   }
 
   return (
@@ -220,7 +256,7 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onBack}
+              onClick={() => navigate('/dashboard')}
               className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               aria-label="Go back"
             >
@@ -250,8 +286,15 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
           </p>
         </motion.div>
 
+        {submitError && (
+          <div className="mb-5 flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {submitError}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} noValidate>
-          {/* Section 1: Issue Description */}
+          {/* Section 1: Title & Description */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -263,34 +306,47 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
               Describe the Issue
             </h2>
 
+            {/* Title */}
+            <div className="mb-5">
+              <FieldLabel htmlFor="grievance-title" required>Short Title</FieldLabel>
+              <input
+                id="grievance-title"
+                type="text"
+                value={title}
+                onChange={(e) => { setTitle(e.target.value.slice(0, 120)); if (errors.title) setErrors(p => ({ ...p, title: '' })); }}
+                placeholder="e.g. Pothole on Main Road causing accidents"
+                className={`w-full px-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
+                  errors.title ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
+                }`}
+              />
+              <AnimatePresence>
+                {errors.title && (
+                  <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> {errors.title}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Description */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-1.5">
-                <FieldLabel htmlFor="description" required>Issue Description</FieldLabel>
+                <FieldLabel htmlFor="description" required>Detailed Description</FieldLabel>
                 <CharCounter value={description} max={1000} />
               </div>
               <textarea
                 id="description"
                 value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value.slice(0, 1000));
-                  if (errors.description) setErrors((p) => ({ ...p, description: '' }));
-                }}
+                onChange={(e) => { setDescription(e.target.value.slice(0, 1000)); if (errors.description) setErrors((p) => ({ ...p, description: '' })); }}
                 rows={5}
                 placeholder="Describe your issue in detail. For example: There has been no water supply in our area for 4 days. Multiple households in Ward 5 are affected..."
                 className={`w-full px-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 resize-none focus:outline-none focus:ring-2 transition-all duration-200 ${
-                  errors.description
-                    ? 'border-red-400 focus:ring-red-200 bg-red-50'
-                    : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
+                  errors.description ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
                 }`}
               />
               <AnimatePresence>
                 {errors.description && (
-                  <motion.p
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-1.5 text-xs text-red-600 flex items-center gap-1"
-                  >
+                  <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> {errors.description}
                   </motion.p>
                 )}
@@ -321,23 +377,16 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
                     className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 overflow-hidden"
                   >
                     <li>
-                      <button
-                        type="button"
-                        className="w-full text-left px-4 py-2.5 text-sm text-slate-500 italic hover:bg-slate-50"
-                        onClick={() => { setCategory(''); setShowCategoryDropdown(false); }}
-                      >
+                      <button type="button" className="w-full text-left px-4 py-2.5 text-sm text-slate-500 italic hover:bg-slate-50"
+                        onClick={() => { setCategory(''); setShowCategoryDropdown(false); }}>
                         Let AI decide automatically
                       </button>
                     </li>
                     {CATEGORIES.map((cat) => (
                       <li key={cat}>
-                        <button
-                          type="button"
-                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${
-                            category === cat ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700'
-                          }`}
-                          onClick={() => { setCategory(cat); setShowCategoryDropdown(false); }}
-                        >
+                        <button type="button"
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${category === cat ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700'}`}
+                          onClick={() => { setCategory(cat); setShowCategoryDropdown(false); }}>
                           {cat}
                         </button>
                       </li>
@@ -368,26 +417,16 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
                   id="location"
                   type="text"
                   value={location}
-                  onChange={(e) => {
-                    setLocation(e.target.value);
-                    if (errors.location) setErrors((p) => ({ ...p, location: '' }));
-                  }}
+                  onChange={(e) => { setLocation(e.target.value); if (errors.location) setErrors((p) => ({ ...p, location: '' })); }}
                   placeholder="e.g. Ward 5, Near Government School, Main Road"
                   className={`w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
-                    errors.location
-                      ? 'border-red-400 focus:ring-red-200 bg-red-50'
-                      : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
+                    errors.location ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
                   }`}
                 />
               </div>
               <AnimatePresence>
                 {errors.location && (
-                  <motion.p
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-1.5 text-xs text-red-600 flex items-center gap-1"
-                  >
+                  <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> {errors.location}
                   </motion.p>
                 )}
@@ -417,14 +456,7 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
                 isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
               }`}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={ACCEPTED_TYPES.join(',')}
-                onChange={handleFileInput}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_TYPES.join(',')} onChange={handleFileInput} className="hidden" />
               <Upload className={`mx-auto h-8 w-8 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-slate-400'}`} />
               <p className="text-sm font-semibold text-slate-700">
                 {isDragging ? 'Drop files here' : 'Drag & drop files, or click to browse'}
@@ -436,12 +468,7 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
 
             <AnimatePresence>
               {fileError && (
-                <motion.p
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 text-xs text-red-600 flex items-center gap-1"
-                >
+                <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-2 text-xs text-red-600 flex items-center gap-1">
                   <AlertCircle className="h-3 w-3 flex-shrink-0" /> {fileError}
                 </motion.p>
               )}
@@ -464,132 +491,20 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
                 </motion.div>
               )}
             </AnimatePresence>
-
             <FieldHint>Photos and videos significantly speed up the resolution process and help AI verify the issue.</FieldHint>
-          </motion.section>
-
-          {/* Section 4: Contact Information */}
-          <motion.section
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6"
-          >
-            <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-700 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">4</span>
-              Contact Information
-            </h2>
-            <p className="text-xs text-slate-500 mb-5 ml-8">Helps us send you status updates. You may submit anonymously.</p>
-
-            <label className="flex items-center gap-3 mb-5 cursor-pointer group w-fit select-none">
-              <div
-                onClick={() => setIsAnonymous((p) => !p)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${isAnonymous ? 'bg-blue-600' : 'bg-slate-300'}`}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${isAnonymous ? 'translate-x-5' : ''}`} />
-              </div>
-              <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">Submit anonymously</span>
-            </label>
-
-            <AnimatePresence>
-              {!isAnonymous && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4 overflow-hidden"
-                >
-                  <div>
-                    <FieldLabel htmlFor="citizen-name" required>Full Name</FieldLabel>
-                    <div className="relative">
-                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                      <input
-                        id="citizen-name"
-                        type="text"
-                        value={name}
-                        onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
-                        placeholder="Your full name"
-                        className={`w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
-                          errors.name ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
-                        }`}
-                      />
-                    </div>
-                    <AnimatePresence>
-                      {errors.name && (
-                        <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.name}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <FieldLabel htmlFor="citizen-phone">Mobile Number</FieldLabel>
-                      <div className="relative">
-                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <input
-                          id="citizen-phone"
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => { setPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: '' })); }}
-                          placeholder="10-digit mobile number"
-                          maxLength={10}
-                          className={`w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
-                            errors.phone ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
-                          }`}
-                        />
-                      </div>
-                      <AnimatePresence>
-                        {errors.phone && (
-                          <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" /> {errors.phone}
-                          </motion.p>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    <div>
-                      <FieldLabel htmlFor="citizen-email">Email Address</FieldLabel>
-                      <div className="relative">
-                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <input
-                          id="citizen-email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors((p) => ({ ...p, email: '' })); }}
-                          placeholder="your@email.com"
-                          className={`w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
-                            errors.email ? 'border-red-400 focus:ring-red-200 bg-red-50' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500 bg-white'
-                          }`}
-                        />
-                      </div>
-                      <AnimatePresence>
-                        {errors.email && (
-                          <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" /> {errors.email}
-                          </motion.p>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.section>
 
           {/* Submit */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.25 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
             className="flex flex-col sm:flex-row gap-3 items-center justify-between"
           >
             <p className="text-xs text-slate-500 flex items-start gap-1.5 max-w-xs">
               <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 flex-shrink-0" />
               Your information is protected and will only be used for grievance resolution.
             </p>
-
             <button
               type="submit"
               disabled={isSubmitting}
@@ -602,7 +517,7 @@ export default function SubmitGrievance({ onBack, onSuccess }) {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
-                    Submitting...
+                    {files.length > 0 ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Submitting…'}
                   </motion.span>
                 ) : (
                   <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">

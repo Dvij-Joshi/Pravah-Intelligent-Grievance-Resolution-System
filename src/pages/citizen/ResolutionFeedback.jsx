@@ -1,4 +1,5 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, CheckCircle2, AlertTriangle, XCircle,
@@ -6,6 +7,7 @@ import {
   Zap, Eye, TrendingUp, AlertOctagon, Home, ChevronRight,
   Clock, User, Shield, RotateCcw,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VERDICTS = [
@@ -157,10 +159,10 @@ function CaseClosed({ gid, onHome }) {
       </motion.div>
 
       <button
-        onClick={onHome}
+        onClick={() => onHome()}
         className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md"
       >
-        <Home className="h-4 w-4" /> Back to Home
+        <Home className="h-4 w-4" /> Back to Dashboard
       </button>
     </motion.div>
   );
@@ -229,36 +231,48 @@ function CaseReopened({ gid, verdict, onHome }) {
         <p><span className="text-purple-400">AGENT</span> resolution_planner — regenerating...</p>
       </motion.div>
 
-      <button onClick={onHome}
+      <button onClick={() => onHome()}
         className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md">
-        <Home className="h-4 w-4" /> Back to Home
+        <Home className="h-4 w-4" /> Back to Dashboard
       </button>
     </motion.div>
   );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function ResolutionFeedback({ data, grievanceId, onBack, onHome }) {
-  const gid = grievanceId || "GRV-1024";
+export default function ResolutionFeedback() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const gid = id?.slice(0, 8).toUpperCase() || 'GRV-XXXX';
 
   const [verdict, setVerdict]       = useState(null);
   const [rating, setRating]         = useState(0);
-  const [comment, setComment]       = useState("");
+  const [comment, setComment]       = useState('');
   const [submitted, setSubmitted]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [outcome, setOutcome]       = useState(null); // "closed" | "reopened"
+  const [outcome, setOutcome]       = useState(null);
 
-  const needsComment = verdict === "partial" || verdict === "not_resolved";
+  const needsComment = verdict === 'partial' || verdict === 'not_resolved';
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!verdict) return;
     setIsSubmitting(true);
-    await new Promise(r => setTimeout(r, 1600));
+
+    const newStatus = verdict === 'resolved' ? 'resolved' : 'in_progress';
+    await supabase.from('grievances').update({
+      feedback_rating: rating || null,
+      feedback_text: comment.trim() || null,
+      status: newStatus,
+    }).eq('id', id);
+
     setIsSubmitting(false);
-    setOutcome(verdict === "resolved" ? "closed" : "reopened");
+    setOutcome(verdict === 'resolved' ? 'closed' : 'reopened');
     setSubmitted(true);
   }
+
+  const onHome = () => navigate('/dashboard');
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -267,7 +281,7 @@ export default function ResolutionFeedback({ data, grievanceId, onBack, onHome }
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {!submitted && (
-              <button type="button" onClick={onBack}
+              <button type="button" onClick={() => navigate(-1)}
                 className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
                 <ArrowLeft className="h-5 w-5" />
               </button>

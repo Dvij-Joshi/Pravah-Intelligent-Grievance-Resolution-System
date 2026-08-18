@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ShieldCheck,
@@ -11,7 +12,9 @@ import {
   Tag,
   Zap,
   Home,
+  Loader2,
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 // Simulate what the Triage Agent would return
 function generateTriageResult(data) {
@@ -43,19 +46,29 @@ const PRIORITY_STYLES = {
   LOW:    { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200', dot: 'bg-green-500' },
 };
 
-export default function GrievanceSubmitted({ data, onTrack, onHome }) {
-  const grievanceId = `GRV-${Math.floor(1000 + Math.random() * 9000)}`;
-  const [gid] = useState(grievanceId);
+export default function GrievanceSubmitted() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [grievance, setGrievance] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [triageReady, setTriageReady] = useState(false);
-  const triage = generateTriageResult(data);
-  const priority = PRIORITY_STYLES[triage.priority] || PRIORITY_STYLES.MEDIUM;
 
-  // Simulate Triage Agent processing delay
   useEffect(() => {
+    async function fetchGrievance() {
+      const { data } = await supabase.from('grievances').select('*').eq('id', id).single();
+      setGrievance(data);
+      setLoading(false);
+    }
+    fetchGrievance();
     const t = setTimeout(() => setTriageReady(true), 2200);
     return () => clearTimeout(t);
-  }, []);
+  }, [id]);
+
+  const triage = generateTriageResult(grievance);
+  const priority = PRIORITY_STYLES[triage.priority] || PRIORITY_STYLES.MEDIUM;
+  const gid = grievance?.readable_id || '...';
 
   function copyId() {
     navigator.clipboard.writeText(gid).then(() => {
@@ -64,10 +77,20 @@ export default function GrievanceSubmitted({ data, onTrack, onHome }) {
     });
   }
 
-  const submittedAt = new Date().toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
-  });
+  const submittedAt = grievance
+    ? new Date(grievance.created_at).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+      })
+    : '';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -161,32 +184,52 @@ export default function GrievanceSubmitted({ data, onTrack, onHome }) {
         >
           <h2 className="text-sm font-bold text-slate-700 mb-4">Submission Summary</h2>
           <div className="space-y-3">
-            {data?.location && (
+            {grievance?.location && (
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-xs text-slate-400">Location</p>
-                  <p className="text-sm text-slate-800 font-medium">{data.location}</p>
+                  <p className="text-sm text-slate-800 font-medium">{grievance.location}</p>
                 </div>
               </div>
             )}
-            {data?.description && (
+            {grievance?.category && (
+              <div className="flex items-start gap-3">
+                <Tag className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-400">Category</p>
+                  <p className="text-sm text-slate-800 font-medium">{grievance.category}</p>
+                </div>
+              </div>
+            )}
+            {grievance?.description && (
               <div className="flex items-start gap-3">
                 <Tag className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-xs text-slate-400">Description</p>
-                  <p className="text-sm text-slate-800 font-medium line-clamp-2">{data.description}</p>
+                  <p className="text-sm text-slate-800 font-medium line-clamp-2">{grievance.description}</p>
                 </div>
               </div>
             )}
-            {data?.files?.length > 0 && (
+            {grievance?.evidence_urls?.length > 0 && (
               <div className="flex items-start gap-3">
-                <div className="h-4 w-4 mt-0.5 flex-shrink-0 flex items-center justify-center">
-                  <span className="text-slate-400 text-xs">📎</span>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Evidence</p>
-                  <p className="text-sm text-slate-800 font-medium">{data.files.length} file{data.files.length > 1 ? 's' : ''} attached</p>
+                <span className="text-slate-400 mt-0.5 flex-shrink-0 text-sm">📎</span>
+                <div className="flex-1">
+                  <p className="text-xs text-slate-400 mb-2">Evidence uploaded ({grievance.evidence_urls.length} file{grievance.evidence_urls.length > 1 ? 's' : ''})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {grievance.evidence_urls.map((url, i) => {
+                      const isImage = /\.(jpg|jpeg|png|webp)$/i.test(url);
+                      return isImage ? (
+                        <img key={i} src={url} alt={`Evidence ${i + 1}`}
+                          className="w-16 h-16 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                      ) : (
+                        <a key={i} href={url} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-700 font-medium hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                          📄 File {i + 1}
+                        </a>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -265,16 +308,16 @@ export default function GrievanceSubmitted({ data, onTrack, onHome }) {
           className="flex flex-col sm:flex-row gap-3"
         >
           <button
-            onClick={() => onTrack?.(gid)}
+            onClick={() => navigate(`/track/${id}`)}
             className="flex-1 flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
           >
             Track Grievance <ArrowRight className="h-4 w-4" />
           </button>
           <button
-            onClick={onHome}
+            onClick={() => navigate('/dashboard')}
             className="flex-1 flex items-center justify-center gap-2 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2"
           >
-            <Home className="h-4 w-4" /> Back to Home
+            <Home className="h-4 w-4" /> Back to Dashboard
           </button>
         </motion.div>
 
