@@ -52,8 +52,9 @@ export function useGrievance(id) {
           .from('grievances')
           .select('*')
           .eq('readable_id', id)
-          .single();
+          .maybeSingle();
         if (e2) throw e2;
+        if (!data) throw new Error("Grievance not found");
         raw = data;
       }
       setGrievance(mapGrievance(raw));
