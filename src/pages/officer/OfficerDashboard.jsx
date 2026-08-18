@@ -80,6 +80,25 @@ export default function OfficerDashboard() {
   const slaOverdue = stats.overdue;
   const slaTotal = Math.max(grievances.filter(g => g.status !== 'Resolved').length, 1);
 
+  // Recent activity derived from live grievances (5 most recent)
+  const activityIcons = {
+    escalated:  { icon: AlertTriangle, color: 'text-red-600',     bg: 'bg-red-50' },
+    reviewed:   { icon: CheckCircle2,  color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    resolved:   { icon: CheckCircle2,  color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    new:        { icon: ClipboardList, color: 'text-blue-600',    bg: 'bg-blue-50' },
+    updated:    { icon: Clock,         color: 'text-amber-600',   bg: 'bg-amber-50' },
+  };
+  const recentActivity = [...grievances]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5)
+    .map((g, i) => ({
+      id: g.id ?? i,
+      type: g.status === 'Resolved' ? 'resolved' : 'new',
+      action: g.status === 'Resolved' ? 'Case resolved' : 'New case assigned',
+      grievance: g.readableId ?? g.id,
+      time: g.createdAt ? new Date(g.createdAt).toLocaleDateString() : '—',
+    }));
+
   if (loading) {
     return (
       <OfficerLayout>
