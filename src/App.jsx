@@ -24,6 +24,7 @@ import ActionWorkflow from './pages/officer/ActionWorkflow';
 import EvidenceUpload from './pages/officer/EvidenceUpload';
 import AIEvidenceReport from './pages/officer/AIEvidenceReport';
 import Escalations from './pages/officer/Escalations';
+import TestAIAgents from './pages/TestAIAgents';
 
 export default function App() {
   return (
