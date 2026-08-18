@@ -18,12 +18,8 @@ import {
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge } from "../../components/Badges";
-import { allComplaints } from "../../data/officerData";
+import { useGrievances } from "../../hooks/useGrievances";
 
-// Only complaints that are actionable (not resolved)
-const actionableComplaints = allComplaints.filter(
-  (c) => c.status !== "Resolved"
-);
 
 function ImageDropZone({ label, hint, value, onChange, icon: Icon = Camera }) {
   const inputRef = useRef(null);
@@ -116,6 +112,8 @@ function ImageDropZone({ label, hint, value, onChange, icon: Icon = Camera }) {
 
 export default function EvidenceUpload() {
   const navigate = useNavigate();
+  const { grievances } = useGrievances();
+  const actionableComplaints = grievances.filter((c) => c.status !== 'Resolved');
   const [selectedId, setSelectedId] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [beforeImage, setBeforeImage] = useState(null);
@@ -125,7 +123,7 @@ export default function EvidenceUpload() {
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const selectedComplaint = allComplaints.find((c) => c.id === selectedId);
+  const selectedComplaint = grievances.find((c) => c.id === selectedId);
 
   const validate = () => {
     const e = {};

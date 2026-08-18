@@ -12,10 +12,12 @@ import {
   ArrowRight,
   X,
   Filter,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge, StatusBadge } from "../../components/Badges";
-import { allComplaints } from "../../data/officerData";
+import { useGrievances } from "../../hooks/useGrievances";
 
 const CATEGORIES = ["All", "Water Supply", "Road Damage", "Street Light", "Garbage Collection", "Sewage", "Parks"];
 const PRIORITIES = ["All", "HIGH", "MEDIUM", "LOW"];
@@ -38,6 +40,7 @@ function SortIcon({ field, sortConfig }) {
 
 export default function AllComplaints() {
   const navigate = useNavigate();
+  const { grievances, loading, error, refetch } = useGrievances();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
@@ -66,7 +69,7 @@ export default function AllComplaints() {
   ).length + (search ? 1 : 0);
 
   const filtered = useMemo(() => {
-    let data = [...allComplaints];
+    let data = [...grievances];
 
     // Tab filter
     if (activeTab === "At Risk") data = data.filter((c) => c.slaStatus === "warning" || c.slaStatus === "critical");
@@ -78,7 +81,7 @@ export default function AllComplaints() {
         (c) =>
           c.id.toLowerCase().includes(search.toLowerCase()) ||
           c.title.toLowerCase().includes(search.toLowerCase()) ||
-          c.citizen.toLowerCase().includes(search.toLowerCase())
+          c.location?.toLowerCase().includes(search.toLowerCase())
       );
 
     // Dropdowns
@@ -95,21 +98,43 @@ export default function AllComplaints() {
     });
 
     return data;
-  }, [search, activeTab, filterCategory, filterPriority, filterStatus, sortConfig]);
+  }, [grievances, search, activeTab, filterCategory, filterPriority, filterStatus, sortConfig]);
 
   const tabCounts = {
-    "All": allComplaints.length,
-    "Assigned to Me": allComplaints.length,
-    "At Risk": allComplaints.filter((c) => c.slaStatus === "warning" || c.slaStatus === "critical").length,
-    "Overdue": allComplaints.filter((c) => c.slaStatus === "overdue").length,
+    "All": grievances.length,
+    "Assigned to Me": grievances.length,
+    "At Risk": grievances.filter((c) => c.slaStatus === "warning" || c.slaStatus === "critical").length,
+    "Overdue": grievances.filter((c) => c.slaStatus === "overdue").length,
   };
+
+  if (loading) {
+    return (
+      <OfficerLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      </OfficerLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <OfficerLayout>
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <AlertTriangle className="h-10 w-10 text-red-400 mb-3" />
+          <p className="text-slate-600 font-medium">{error}</p>
+          <button onClick={refetch} className="mt-3 text-sm text-blue-600 hover:underline">Retry</button>
+        </div>
+      </OfficerLayout>
+    );
+  }
 
   return (
     <OfficerLayout>
       {/* Page Header */}
       <div className="mb-5">
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">All Complaints</h2>
-        <p className="text-sm text-slate-500 mt-1">{allComplaints.length} total cases assigned to your ward</p>
+        <p className="text-sm text-slate-500 mt-1">{grievances.length} total cases assigned to your ward</p>
       </div>
 
       {/* Tabs */}

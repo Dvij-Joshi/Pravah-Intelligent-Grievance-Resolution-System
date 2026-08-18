@@ -21,10 +21,11 @@ import {
   Building2,
   Tag,
   Hash,
+  Loader2,
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, StatusBadge, SLABadge } from "../../components/Badges";
-import { allComplaints } from "../../data/officerData";
+import { useGrievance } from "../../hooks/useGrievances";
 
 // ── Per-grievance timeline & action plan data ──────────────────────────────
 const timelineData = {
@@ -86,16 +87,26 @@ export default function ComplaintDetails() {
   const [activeTab, setActiveTab] = useState("Details");
   const [note, setNote] = useState("");
 
-  const complaint = allComplaints.find((c) => c.id === id);
+  const { grievance: complaint, loading, error } = useGrievance(id);
   const timeline = timelineData[id] || timelineData["GRV-1024"];
   const actionPlan = actionPlanData[id] || actionPlanData["GRV-1024"];
 
-  if (!complaint) {
+  if (loading) {
+    return (
+      <OfficerLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      </OfficerLayout>
+    );
+  }
+
+  if (error || !complaint) {
     return (
       <OfficerLayout>
         <div className="flex flex-col items-center justify-center h-64 text-slate-400">
           <FileText className="h-12 w-12 mb-3 text-slate-200" />
-          <div className="font-medium text-slate-500">Grievance not found</div>
+          <div className="font-medium text-slate-500">{error || 'Grievance not found'}</div>
           <button onClick={() => navigate("/officer/complaints")} className="mt-3 text-sm text-blue-600 hover:underline">
             ← Back to All Complaints
           </button>

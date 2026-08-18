@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -12,15 +12,13 @@ import {
   Zap,
   RefreshCw,
   Eye,
+  Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge, StatusBadge } from "../../components/Badges";
-import {
-  dashboardStats,
-  priorityCases,
-  recentActivity,
-} from "../../data/officerData";
+import { useGrievances } from "../../hooks/useGrievances";
+
 
 const FadeIn = ({ children, delay = 0, className = "" }) => (
   <motion.div
@@ -33,45 +31,6 @@ const FadeIn = ({ children, delay = 0, className = "" }) => (
   </motion.div>
 );
 
-const statCards = [
-  {
-    label: "Assigned",
-    value: dashboardStats.assigned,
-    icon: ClipboardList,
-    color: "text-blue-700",
-    bg: "bg-blue-50",
-    border: "border-blue-100",
-    description: "Total active cases",
-  },
-  {
-    label: "SLA At Risk",
-    value: dashboardStats.slaAtRisk,
-    icon: AlertTriangle,
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-    border: "border-amber-100",
-    description: "Approaching deadline",
-  },
-  {
-    label: "Overdue",
-    value: dashboardStats.overdue,
-    icon: Clock,
-    color: "text-red-600",
-    bg: "bg-red-50",
-    border: "border-red-100",
-    description: "SLA already breached",
-  },
-  {
-    label: "Resolved",
-    value: dashboardStats.resolved,
-    icon: CheckCircle2,
-    color: "text-emerald-600",
-    bg: "bg-emerald-50",
-    border: "border-emerald-100",
-    description: "This week",
-  },
-];
-
 const activityIcons = {
   escalation: { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-50" },
   evidence: { icon: Eye, color: "text-blue-500", bg: "bg-blue-50" },
@@ -81,6 +40,60 @@ const activityIcons = {
 
 export default function OfficerDashboard() {
   const navigate = useNavigate();
+  const { grievances, loading, error, refetch } = useGrievances();
+
+  const stats = useMemo(() => ({
+    assigned: grievances.filter(g => g.status !== 'Resolved').length,
+    slaAtRisk: grievances.filter(g => g.slaStatus === 'warning' || g.slaStatus === 'critical').length,
+    overdue: grievances.filter(g => g.slaStatus === 'overdue').length,
+    resolved: grievances.filter(g => g.status === 'Resolved').length,
+    total: grievances.length,
+  }), [grievances]);
+
+  const statCards = [
+    { label: "Assigned", value: stats.assigned, icon: ClipboardList, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-100", description: "Total active cases" },
+    { label: "SLA At Risk", value: stats.slaAtRisk, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100", description: "Approaching deadline" },
+    { label: "Overdue", value: stats.overdue, icon: Clock, color: "text-red-600", bg: "bg-red-50", border: "border-red-100", description: "SLA already breached" },
+    { label: "Resolved", value: stats.resolved, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100", description: "All time" },
+  ];
+
+  // Priority cases: overdue first, then critical, then warning, top 5
+  const priorityCases = useMemo(() =>
+    [...grievances]
+      .filter(g => g.status !== 'Resolved')
+      .sort((a, b) => {
+        const order = { overdue: 0, critical: 1, warning: 2, ok: 3 };
+        return (order[a.slaStatus] ?? 3) - (order[b.slaStatus] ?? 3);
+      })
+      .slice(0, 5),
+  [grievances]);
+
+  const slaOnTrack = grievances.filter(g => g.slaStatus === 'ok' && g.status !== 'Resolved').length;
+  const slaAtRisk = stats.slaAtRisk;
+  const slaOverdue = stats.overdue;
+  const slaTotal = Math.max(grievances.filter(g => g.status !== 'Resolved').length, 1);
+
+  if (loading) {
+    return (
+      <OfficerLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      </OfficerLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <OfficerLayout>
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <AlertTriangle className="h-10 w-10 text-red-400 mb-3" />
+          <p className="text-slate-600 font-medium">{error}</p>
+          <button onClick={refetch} className="mt-3 text-sm text-blue-600 hover:underline">Retry</button>
+        </div>
+      </OfficerLayout>
+    );
+  }
 
   return (
     <OfficerLayout>
@@ -118,14 +131,14 @@ export default function OfficerDashboard() {
       </div>
 
       {/* Alert Banner for overdue */}
-      {dashboardStats.overdue > 0 && (
+      {stats.overdue > 0 && (
         <FadeIn delay={0.3} className="mb-6">
           <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3.5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
               <div>
                 <span className="text-sm font-semibold text-red-800">
-                  {dashboardStats.overdue} cases are overdue.
+                  {stats.overdue} cases are overdue.
                 </span>
                 <span className="text-sm text-red-600 ml-1">
                   Supervisors have been notified. Immediate action required.
@@ -252,9 +265,9 @@ export default function OfficerDashboard() {
               </div>
               <div className="space-y-3">
                 {[
-                  { label: "On Track", count: 20, total: 36, color: "bg-emerald-500" },
-                  { label: "At Risk", count: 12, total: 36, color: "bg-amber-400" },
-                  { label: "Overdue", count: 4, total: 36, color: "bg-red-500" },
+                  { label: "On Track", count: slaOnTrack, total: slaTotal, color: "bg-emerald-500" },
+                  { label: "At Risk", count: slaAtRisk, total: slaTotal, color: "bg-amber-400" },
+                  { label: "Overdue", count: slaOverdue, total: slaTotal, color: "bg-red-500" },
                 ].map((item) => (
                   <div key={item.label}>
                     <div className="flex items-center justify-between mb-1">
