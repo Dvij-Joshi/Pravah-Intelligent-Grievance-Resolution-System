@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, ArrowLeft, MapPin, User, Tag, Clock,
   CheckCircle2, Circle, AlertTriangle, ChevronRight,
   Zap, FileText, Bell, Camera, MessageSquare, Phone,
   TrendingUp, Activity, Star, RefreshCw, AlertOctagon,
-  Building2, CalendarDays, Hash, Eye, ExternalLink,
+  Building2, CalendarDays, Hash, Eye, ExternalLink, Loader2,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 // ─── Static mock data for the grievance ──────────────────────────────────────
 function buildGrievanceDetails(data, gid) {
@@ -168,11 +170,34 @@ const TABS = [
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, onVerify }) {
-  const gid = grievanceId || "GRV-1024";
-  const g   = buildGrievanceDetails(data, gid);
+export default function GrievanceDetails() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [grievance, setGrievance] = useState(null);
+  const [dbLoading, setDbLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  useEffect(() => {
+    async function fetchGrievance() {
+      const { data } = await supabase.from('grievances').select('*').eq('id', id).single();
+      setGrievance(data);
+      setDbLoading(false);
+    }
+    fetchGrievance();
+  }, [id]);
+
+  if (dbLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+      </div>
+    );
+  }
+
+  const gid = grievance?.readable_id || id.slice(0, 8).toUpperCase();
+  const g   = buildGrievanceDetails(grievance, gid);
 
   const PRIORITY_BADGE = {
     HIGH:   "bg-red-100 text-red-700 border-red-200",
@@ -186,7 +211,7 @@ export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, o
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={onBack}
+            <button type="button" onClick={() => navigate(-1)}
               className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -195,7 +220,7 @@ export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, o
               <span className="font-bold text-slate-900 text-lg">Pravah</span>
             </div>
           </div>
-          <button onClick={onTrack}
+          <button onClick={() => navigate(`/track/${id}`)}
             className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-all hover:bg-blue-100">
             <Activity className="h-4 w-4" /> Live Track
           </button>
@@ -205,7 +230,7 @@ export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, o
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
 
         {/* ── Action Required Banner ── */}
-        {onVerify && (
+        {g.status === 'Pending Feedback' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -223,7 +248,7 @@ export default function GrievanceDetails({ data, grievanceId, onBack, onTrack, o
               </div>
             </div>
             <button
-              onClick={onVerify}
+              onClick={() => navigate(`/feedback/${id}`)}
               className="flex-shrink-0 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap"
             >
               Verify Resolution <ChevronRight className="h-4 w-4" />
