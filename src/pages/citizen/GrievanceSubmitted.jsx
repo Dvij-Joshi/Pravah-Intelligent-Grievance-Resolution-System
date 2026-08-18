@@ -16,30 +16,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-// Simulate what the Triage Agent would return
-function generateTriageResult(data) {
-  const categoryMap = {
-    'Water Supply': { dept: 'Water Supply Department', priority: 'HIGH', sla: '48 hours' },
-    'Road Infrastructure': { dept: 'Public Works Department', priority: 'HIGH', sla: '72 hours' },
-    'Sanitation & Drainage': { dept: 'Sanitation Department', priority: 'MEDIUM', sla: '48 hours' },
-    'Electricity': { dept: 'Electricity Department', priority: 'HIGH', sla: '24 hours' },
-    'Street Lighting': { dept: 'Electricity Department', priority: 'LOW', sla: '96 hours' },
-    'Garbage Collection': { dept: 'Sanitation Department', priority: 'MEDIUM', sla: '24 hours' },
-    'Public Property Damage': { dept: 'Municipal Corporation', priority: 'MEDIUM', sla: '72 hours' },
-    'Noise Pollution': { dept: 'Environment Department', priority: 'LOW', sla: '96 hours' },
-    'Other': { dept: 'Municipal Corporation', priority: 'MEDIUM', sla: '72 hours' },
-  };
-
-  const cat = data?.category || 'Water Supply';
-  const result = categoryMap[cat] || categoryMap['Other'];
-  return {
-    category: cat || 'Water Supply',
-    department: result.dept,
-    priority: result.priority,
-    sla: result.sla,
-  };
-}
-
 const PRIORITY_STYLES = {
   HIGH:   { bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200',   dot: 'bg-red-500'   },
   MEDIUM: { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200', dot: 'bg-amber-500' },
@@ -53,7 +29,6 @@ export default function GrievanceSubmitted() {
   const [grievance, setGrievance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [triageReady, setTriageReady] = useState(false);
 
   useEffect(() => {
     async function fetchGrievance() {
@@ -62,12 +37,52 @@ export default function GrievanceSubmitted() {
       setLoading(false);
     }
     fetchGrievance();
-    const t = setTimeout(() => setTriageReady(true), 2200);
-    return () => clearTimeout(t);
+
+    // Subscribe to realtime updates in case AI finishes while we are on this page
+    const channel = supabase
+      .channel(`grievance-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'grievances', filter: `id=eq.${id}` },
+        (payload) => {
+          setGrievance(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
-  const triage = generateTriageResult(grievance);
-  const priority = PRIORITY_STYLES[triage.priority] || PRIORITY_STYLES.MEDIUM;
+  const triageReady = !!grievance?.ai_triage_data;
+  
+  // Department mapping since AI doesn't return department directly
+  function getDepartment(cat) {
+    const map = {
+      'Water Supply': 'Water Supply Department',
+      'Road Infrastructure': 'Public Works Department',
+      'Sanitation & Drainage': 'Sanitation Department',
+      'Electricity': 'Electricity Department',
+      'Street Lighting': 'Electricity Department',
+      'Garbage Collection': 'Sanitation Department',
+      'Public Property Damage': 'Municipal Corporation',
+      'Noise Pollution': 'Environment Department',
+    };
+    return map[cat] || 'Municipal Corporation';
+  }
+
+  const triage = triageReady ? {
+    category: grievance.ai_triage_data.category,
+    department: getDepartment(grievance.ai_triage_data.category),
+    priority: grievance.ai_triage_data.priority?.toUpperCase() || 'MEDIUM',
+    sla: `${grievance.ai_triage_data.estimated_sla_hours} hours`,
+  } : null;
+
+  const priority = triageReady 
+    ? (PRIORITY_STYLES[triage.priority] || PRIORITY_STYLES.MEDIUM) 
+    : PRIORITY_STYLES.MEDIUM;
+
   const gid = grievance?.readable_id || '...';
 
   function copyId() {

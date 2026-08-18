@@ -11,33 +11,50 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Mock data factory ────────────────────────────────────────────────────────
 function buildGrievanceState(data, gid) {
-  const category = data?.category || "Water Supply";
-  const location = data?.location || "Ward 5, Near Government School";
-  const slaHours = { "Water Supply": 48, "Road Infrastructure": 72, "Electricity": 24 }[category] ?? 48;
+  const category = data?.ai_triage_data?.category || data?.category || "Processing...";
+  const location = data?.location || "Unknown Location";
+  const slaHours = data?.ai_triage_data?.estimated_sla_hours || 48;
+  const priority = data?.ai_triage_data?.priority?.toUpperCase() || data?.priority?.toUpperCase() || "MEDIUM";
+  
+  // Map tasks from AI workflow
+  const aiTasks = data?.ai_workflow?.tasks || [];
+  let actionPlan = aiTasks.map((t, i) => ({
+    id: typeof t.id === 'string' ? parseInt(t.id, 10) : (t.id || (i + 1)),
+    title: t.title,
+    responsible: t.department || "Field Team",
+    deadline: `${Math.round(slaHours * ((i + 1) / Math.max(1, aiTasks.length)))} hrs`,
+    status: i === 0 ? "active" : "pending"
+  }));
+
+  if (actionPlan.length === 0) {
+    actionPlan = [
+      { id: 1, title: "Waiting for Resolution Planner...", responsible: "AI Agent", deadline: "--", status: "pending" }
+    ];
+  }
+
+  const timeline = [
+    { time: data?.created_at ? new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now", event: "Grievance submitted by citizen", type: "submit" }
+  ];
+
+  if (data?.ai_triage_data) {
+    timeline.push({ time: "Triage Done", event: `Triage Agent structured complaint (${category})`, type: "ai" });
+  }
+  if (data?.ai_workflow) {
+    timeline.push({ time: "Plan Ready", event: "Resolution Planner generated action plan", type: "ai" });
+  }
+
   return {
     gid,
     category,
     location,
-    description: data?.description || "No water supply for 4 days. Multiple households affected.",
-    department: "Water Supply Department",
-    officer: "Rahul Sharma (Ward Officer)",
-    submittedAt: new Date(),
+    description: data?.description || "",
+    department: data?.ai_workflow?.primary_department || "Pending Assignment",
+    officer: "Pending Assignment",
+    submittedAt: data?.created_at ? new Date(data.created_at) : new Date(),
     slaHours,
-    priority: "HIGH",
-    actionPlan: [
-      { id: 1, title: "Verify complaint location", responsible: "Ward Officer", deadline: "4 hrs",  status: "done" },
-      { id: 2, title: "Inspect water pipeline",    responsible: "Field Team",   deadline: "12 hrs", status: "active" },
-      { id: 3, title: "Identify fault cause",      responsible: "Water Dept",   deadline: "20 hrs", status: "pending", dep: "Inspection" },
-      { id: 4, title: "Repair fault",              responsible: "Maintenance",  deadline: "36 hrs", status: "pending", dep: "Cause identified" },
-      { id: 5, title: "Upload resolution evidence",responsible: "Field Team",   deadline: "44 hrs", status: "pending" },
-      { id: 6, title: "Citizen verification",      responsible: "Citizen",      deadline: "48 hrs", status: "pending" },
-    ],
-    timeline: [
-      { time: "Just now",  event: "Grievance submitted by citizen",          type: "submit" },
-      { time: "0m ago",    event: "Triage Agent structured complaint",        type: "ai" },
-      { time: "1m ago",    event: "Resolution Planner generated action plan", type: "ai" },
-      { time: "2m ago",    event: "Assigned to Rahul Sharma (Ward Officer)",  type: "assign" },
-    ],
+    priority,
+    actionPlan,
+    timeline,
   };
 }
 
@@ -137,12 +154,27 @@ export default function TrackGrievance() {
       setDbLoading(false);
     }
     fetchGrievance();
+
+    const channel = supabase
+      .channel(`grievance-track-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'grievances', filter: `id=eq.${id}` },
+        (payload) => {
+          setGrievance(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const gid = grievance?.readable_id || 'GRV-XXXX';
   const state = buildGrievanceState(grievance, gid);
   const [hoursElapsed, setHoursElapsed] = useState(2);
-  const [agentStage, setAgentStage] = useState(1);
+  const [agentStage, setAgentStage] = useState(grievance?.ai_workflow ? 1 : (grievance?.ai_triage_data ? 0 : -1));
   const [isSimulating, setIsSimulating] = useState(false);
   const [escalated, setEscalated] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -150,7 +182,10 @@ export default function TrackGrievance() {
   const [localState, setLocalState] = useState(null);
 
   useEffect(() => {
-    if (grievance) setLocalState(buildGrievanceState(grievance, grievance.readable_id));
+    if (grievance) {
+      setLocalState(buildGrievanceState(grievance, grievance.readable_id));
+      setAgentStage(grievance.ai_workflow ? 1 : (grievance.ai_triage_data ? 0 : -1));
+    }
   }, [grievance]);
 
   function pushNotif(msg, type = "info") {
@@ -471,14 +506,26 @@ export default function TrackGrievance() {
                   <AgentPipeline stage={agentStage} />
                 </div>
                 <div className="border-t border-slate-100 pt-5">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Triage Agent Output</h3>
-                  <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-green-400 space-y-0.5">
+                  <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-green-400 space-y-0.5 overflow-x-auto">
                     <p><span className="text-slate-500">{'{'}</span></p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"category"</span>: <span className="text-amber-300">"{state.category}"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"department"</span>: <span className="text-amber-300">"Water Supply Dept"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"priority"</span>: <span className="text-red-400">"HIGH"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"affected_population"</span>: <span className="text-amber-300">"Multiple households"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"urgency_reason"</span>: [<span className="text-amber-300">"Essential service"</span>, <span className="text-amber-300">"4-day duration"</span>]</p>
+                    {grievance?.ai_triage_data ? (
+                      Object.entries(grievance.ai_triage_data).map(([key, val], index, arr) => {
+                        const isLast = index === arr.length - 1;
+                        let valSpan;
+                        if (Array.isArray(val)) {
+                          valSpan = <>[ {val.map((v, i) => <React.Fragment key={i}><span className="text-amber-300">"{v}"</span>{i < val.length - 1 ? ", " : ""}</React.Fragment>)} ]</>;
+                        } else if (typeof val === 'number') {
+                          valSpan = <span className="text-purple-400">{val}</span>;
+                        } else {
+                          valSpan = <span className={key === 'priority' ? "text-red-400" : "text-amber-300"}>"{val}"</span>;
+                        }
+                        return (
+                          <p key={key}>&nbsp;&nbsp;<span className="text-blue-400">"{key}"</span>: {valSpan}{!isLast && ","}</p>
+                        );
+                      })
+                    ) : (
+                      <p>&nbsp;&nbsp;<span className="text-slate-400 italic">// Waiting for AI Agent...</span></p>
+                    )}
                     <p><span className="text-slate-500">{'}'}</span></p>
                   </div>
                 </div>

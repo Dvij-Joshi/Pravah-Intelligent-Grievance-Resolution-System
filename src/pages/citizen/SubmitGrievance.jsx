@@ -132,6 +132,7 @@ export default function SubmitGrievance() {
   const [submitError, setSubmitError] = useState('');
   const [fileError, setFileError] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
 
   function validate() {
     const errs = {};
@@ -183,6 +184,49 @@ export default function SubmitGrievance() {
 
   function removeFile(name) {
     setFiles((prev) => prev.filter((f) => f.name !== name));
+  }
+
+  async function handleAutoSuggestCategory() {
+    if (!title.trim() || !description.trim()) return;
+    
+    setIsSuggestingCategory(true);
+    try {
+      const prompt = `You are a helpful assistant. Based on the following Title and Description, pick the most appropriate category from this exact list:
+[${CATEGORIES.join(', ')}].
+
+Respond ONLY with the name of the category, nothing else.
+
+Title: ${title}
+Description: ${description}`;
+
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-oss-120b',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+        })
+      });
+
+      const data = await res.json();
+      const suggested = data.choices[0]?.message?.content?.trim();
+      
+      // Ensure the suggested category actually exists in our list (handling minor case differences)
+      const matched = CATEGORIES.find(c => c.toLowerCase() === suggested.toLowerCase());
+      if (matched) {
+        setCategory(matched);
+      } else {
+        setCategory('Other');
+      }
+    } catch (error) {
+      console.error('Error suggesting category:', error);
+    } finally {
+      setIsSuggestingCategory(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -245,6 +289,40 @@ export default function SubmitGrievance() {
       return;
     }
 
+    // ── 3. Call AI Backend Pipeline Asynchronously ─────────────────────────────
+    (async () => {
+      try {
+        // Run Triage Agent
+        const triageRes = await fetch('http://localhost:3001/api/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grievance: data })
+        });
+        const triageData = await triageRes.json();
+
+        // Update Supabase with triage results using user's authenticated session
+        await supabase.from('grievances').update({ 
+          ai_triage_data: triageData,
+          priority: triageData.priority
+        }).eq('id', data.id);
+
+        // Run Resolution Planner Agent
+        const planRes = await fetch('http://localhost:3001/api/plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grievance: data, triageData })
+        });
+        const planData = await planRes.json();
+
+        // Update Supabase with action plan
+        await supabase.from('grievances').update({ 
+          ai_workflow: planData
+        }).eq('id', data.id);
+
+      } catch (apiErr) {
+        console.warn("AI Backend pipeline failed asynchronously:", apiErr);
+      }
+    })();
     navigate(`/submitted/${data.id}`);
   }
 
@@ -356,7 +434,29 @@ export default function SubmitGrievance() {
 
             {/* Category */}
             <div className="relative">
-              <FieldLabel htmlFor="category">Category (auto-suggested by AI)</FieldLabel>
+              <div className="flex items-center justify-between mb-1.5">
+                <FieldLabel htmlFor="category">Category (auto-suggested by AI)</FieldLabel>
+                <button
+                  type="button"
+                  onClick={handleAutoSuggestCategory}
+                  disabled={isSuggestingCategory || !title.trim() || !description.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-semibold border border-purple-200 transition-colors"
+                >
+                  {isSuggestingCategory ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      Suggesting...
+                    </>
+                  ) : (
+                    <>
+                      <span>✨</span> Auto-suggest
+                    </>
+                  )}
+                </button>
+              </div>
               <button
                 id="category"
                 type="button"
