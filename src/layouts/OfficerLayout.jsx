@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -12,18 +12,29 @@ import {
   Bell,
   ChevronRight,
 } from "lucide-react";
-import { officerProfile } from "../data/officerData";
+import { useAuth } from "../context/AuthContext";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/officer/dashboard" },
-  { label: "All Complaints", icon: FileText, path: "/officer/complaints" },
-  { label: "Action Workflow", icon: Workflow, path: "/officer/workflow" },
-  { label: "Evidence Upload", icon: Upload, path: "/officer/evidence" },
+  { label: "Dashboard",        icon: LayoutDashboard, path: "/officer/dashboard" },
+  { label: "All Complaints",   icon: FileText,        path: "/officer/complaints" },
+  { label: "Action Workflow",  icon: Workflow,        path: "/officer/workflow" },
+  { label: "Evidence Upload",  icon: Upload,          path: "/officer/evidence" },
   { label: "AI Evidence Report", icon: ClipboardList, path: "/officer/evidence-report" },
-  { label: "Escalations", icon: AlertTriangle, path: "/officer/escalations" },
+  { label: "Escalations",      icon: AlertTriangle,   path: "/officer/escalations" },
 ];
 
 export default function OfficerLayout({ children }) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const fullName = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Officer";
+  const initials = fullName.slice(0, 2).toUpperCase();
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
       {/* Sidebar */}
@@ -41,11 +52,11 @@ export default function OfficerLayout({ children }) {
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-3 py-2.5">
             <div className="w-9 h-9 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-              {officerProfile.avatar}
+              {initials}
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-900 truncate">{officerProfile.name}</div>
-              <div className="text-xs text-slate-500 truncate">{officerProfile.ward}</div>
+              <div className="text-sm font-semibold text-slate-900 truncate">{fullName}</div>
+              <div className="text-xs text-slate-500 truncate">{user?.email ?? ""}</div>
             </div>
           </div>
         </div>
@@ -77,9 +88,12 @@ export default function OfficerLayout({ children }) {
           </div>
         </nav>
 
-        {/* Logout */}
+        {/* Sign Out */}
         <div className="px-3 py-3 border-t border-slate-200">
-          <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors">
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
             <LogOut size={18} className="flex-shrink-0" />
             Sign Out
           </button>
@@ -92,9 +106,9 @@ export default function OfficerLayout({ children }) {
         <header className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-base font-semibold text-slate-900">
-              Welcome back, {officerProfile.name}
+              Welcome back, {fullName}
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">{officerProfile.ward} · {officerProfile.department}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{user?.email ?? "Officer Portal"}</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">

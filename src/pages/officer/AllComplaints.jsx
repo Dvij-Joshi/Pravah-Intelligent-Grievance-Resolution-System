@@ -395,7 +395,7 @@ export default function AllComplaints() {
           <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
             <span className="text-xs text-slate-500">
               Showing <span className="font-semibold text-slate-700">{filtered.length}</span> of{" "}
-              <span className="font-semibold text-slate-700">{allComplaints.length}</span> complaints
+              <span className="font-semibold text-slate-700">{grievances.length}</span> complaints
             </span>
           </div>
         )}
