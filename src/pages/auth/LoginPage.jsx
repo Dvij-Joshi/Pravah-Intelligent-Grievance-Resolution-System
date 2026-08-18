@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -22,14 +23,22 @@ export default function LoginPage() {
     }
     setIsLoading(true);
     setError('');
-    const { error: authError } = await signIn({ email, password });
+    const { error: authError, data } = await signIn({ email, password });
     setIsLoading(false);
     if (authError) {
       setError(authError.message === 'Invalid login credentials'
         ? 'Invalid email or password. Please try again.'
         : authError.message);
     } else {
-      navigate('/dashboard');
+      // Fetch role directly so we don't depend on stale context
+      const userId = data?.user?.id;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      const userRole = profile?.role ?? 'citizen';
+      navigate(userRole === 'officer' ? '/officer/dashboard' : '/dashboard');
     }
   }
 

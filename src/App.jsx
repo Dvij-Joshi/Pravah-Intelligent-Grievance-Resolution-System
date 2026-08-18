@@ -35,23 +35,23 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Citizen (protected) */}
-          <Route path="/dashboard" element={<ProtectedRoute><CitizenDashboard /></ProtectedRoute>} />
-          <Route path="/submit" element={<ProtectedRoute><SubmitGrievance /></ProtectedRoute>} />
-          <Route path="/submitted/:id" element={<ProtectedRoute><GrievanceSubmitted /></ProtectedRoute>} />
-          <Route path="/track/:id" element={<ProtectedRoute><TrackGrievance /></ProtectedRoute>} />
-          <Route path="/grievance/:id" element={<ProtectedRoute><GrievanceDetails /></ProtectedRoute>} />
-          <Route path="/feedback/:id" element={<ProtectedRoute><ResolutionFeedback /></ProtectedRoute>} />
+          {/* Citizen (role: citizen) */}
+          <Route path="/dashboard"    element={<ProtectedRoute requireRole="citizen"><CitizenDashboard /></ProtectedRoute>} />
+          <Route path="/submit"       element={<ProtectedRoute requireRole="citizen"><SubmitGrievance /></ProtectedRoute>} />
+          <Route path="/submitted/:id" element={<ProtectedRoute requireRole="citizen"><GrievanceSubmitted /></ProtectedRoute>} />
+          <Route path="/track/:id"    element={<ProtectedRoute requireRole="citizen"><TrackGrievance /></ProtectedRoute>} />
+          <Route path="/grievance/:id" element={<ProtectedRoute requireRole="citizen"><GrievanceDetails /></ProtectedRoute>} />
+          <Route path="/feedback/:id" element={<ProtectedRoute requireRole="citizen"><ResolutionFeedback /></ProtectedRoute>} />
 
-          {/* Officer (protected) */}
+          {/* Officer (role: officer) */}
           <Route path="/officer" element={<Navigate to="/officer/dashboard" replace />} />
-          <Route path="/officer/dashboard" element={<ProtectedRoute><OfficerDashboard /></ProtectedRoute>} />
-          <Route path="/officer/complaints" element={<ProtectedRoute><AllComplaints /></ProtectedRoute>} />
-          <Route path="/officer/complaints/:id" element={<ProtectedRoute><ComplaintDetails /></ProtectedRoute>} />
-          <Route path="/officer/workflow" element={<ProtectedRoute><ActionWorkflow /></ProtectedRoute>} />
-          <Route path="/officer/evidence" element={<ProtectedRoute><EvidenceUpload /></ProtectedRoute>} />
-          <Route path="/officer/evidence-report" element={<ProtectedRoute><AIEvidenceReport /></ProtectedRoute>} />
-          <Route path="/officer/escalations" element={<ProtectedRoute><Escalations /></ProtectedRoute>} />
+          <Route path="/officer/dashboard"     element={<ProtectedRoute requireRole="officer"><OfficerDashboard /></ProtectedRoute>} />
+          <Route path="/officer/complaints"    element={<ProtectedRoute requireRole="officer"><AllComplaints /></ProtectedRoute>} />
+          <Route path="/officer/complaints/:id" element={<ProtectedRoute requireRole="officer"><ComplaintDetails /></ProtectedRoute>} />
+          <Route path="/officer/workflow"      element={<ProtectedRoute requireRole="officer"><ActionWorkflow /></ProtectedRoute>} />
+          <Route path="/officer/evidence"      element={<ProtectedRoute requireRole="officer"><EvidenceUpload /></ProtectedRoute>} />
+          <Route path="/officer/evidence-report" element={<ProtectedRoute requireRole="officer"><AIEvidenceReport /></ProtectedRoute>} />
+          <Route path="/officer/escalations"   element={<ProtectedRoute requireRole="officer"><Escalations /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

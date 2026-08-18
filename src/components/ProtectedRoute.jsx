@@ -2,8 +2,15 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+/**
+ * ProtectedRoute
+ *
+ * Props:
+ *   - children       : the page to render if authorized
+ *   - requireRole    : 'officer' | 'citizen' | undefined (any authenticated user)
+ */
+export default function ProtectedRoute({ children, requireRole }) {
+  const { user, role, loading } = useAuth();
 
   if (loading) {
     return (
@@ -19,8 +26,15 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
+  // Not logged in → go to login
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Logged in but wrong role → redirect to their correct home
+  if (requireRole && role !== requireRole) {
+    if (role === 'officer') return <Navigate to="/officer/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
