@@ -196,15 +196,21 @@ export default function ResolutionFeedback() {
 
     // If reopening, modify task progress & officer notes
     if (!isResolved && grievance) {
-      const existingProgress = Array.isArray(grievance.task_progress) ? [...grievance.task_progress] : [];
-      let reversed = [...existingProgress].reverse();
-      let lastCompletedIdx = reversed.findIndex(p => p.status === 'done');
-      if (lastCompletedIdx !== -1) {
-        let originalIdx = existingProgress.length - 1 - lastCompletedIdx;
-        existingProgress[originalIdx].status = 'active';
-      } else if (existingProgress.length > 0) {
-        existingProgress[existingProgress.length - 1].status = 'active';
+      let existingProgress = Array.isArray(grievance.task_progress) && grievance.task_progress.length > 0
+        ? [...grievance.task_progress]
+        : (grievance.ai_workflow?.tasks || []).map((t, i) => ({ id: t.id ?? i, status: 'done' }));
+
+      if (existingProgress.length > 0) {
+        let reversed = [...existingProgress].reverse();
+        let lastCompletedIdx = reversed.findIndex(p => p.status === 'done');
+        if (lastCompletedIdx !== -1) {
+          let originalIdx = existingProgress.length - 1 - lastCompletedIdx;
+          existingProgress[originalIdx].status = 'active';
+        } else {
+          existingProgress[existingProgress.length - 1].status = 'active';
+        }
       }
+      
       updates.task_progress = existingProgress;
 
       const existingNotes = Array.isArray(grievance.officer_notes) ? [...grievance.officer_notes] : [];

@@ -45,7 +45,7 @@ function buildGrievanceState(data, gid) {
   if (data?.ai_evidence_report?.recommendation === "APPROVE" || status === "Resolved") stage = 5;
   if (status === "Closed") stage = 6;
   // If case is back In Progress (citizen refiled), roll back to repair stage
-  if (status === "In Progress" && stage >= 5) stage = 3;
+  if (status === "In Progress" && stage >= 4) stage = 3;
 
   const aiTasks = data?.ai_workflow?.tasks || [];
 

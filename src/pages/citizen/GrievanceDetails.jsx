@@ -47,7 +47,7 @@ function buildGrievanceDetails(data, gid) {
   if (hasEvidence) stage = 4;
   if (data?.ai_evidence_report?.recommendation === "APPROVE" || status === "Resolved" || status === "Closed") stage = 5;
   if (status === "Closed") stage = 6;
-  if (status === "In Progress" && stage >= 5) stage = 3;
+  if (status === "In Progress" && stage >= 4) stage = 3;
 
   const steps = [
     { label: "Submitted",             done: true,        active: false },
