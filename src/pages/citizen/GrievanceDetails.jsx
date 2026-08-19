@@ -25,7 +25,8 @@ function buildGrievanceDetails(data, gid) {
   if (data?.ai_workflow) stage = 2;
 
   const progress = data?.task_progress || [];
-  const hasProgress = progress.some(p => p.status === "done" || p.status === "active");
+  const hasOldProgress = data?.ai_workflow?.task_statuses ? Object.values(data.ai_workflow.task_statuses).some(s => s === "Completed" || s === "In Progress") : false;
+  const hasProgress = progress.some(p => p.status === "done" || p.status === "active") || hasOldProgress;
   const hasEvidence = data?.resolution_evidence_urls?.length > 0 || data?.ai_evidence_report;
   
   if (hasProgress) stage = 3;
@@ -46,8 +47,13 @@ function buildGrievanceDetails(data, gid) {
   const aiTasks  = data?.ai_workflow?.tasks || [];
 
   let tasks = aiTasks.map((t, i) => {
-    const saved = progress.find(p => p.id === (t.id ?? i));
-    let status = saved?.status ?? (i === 0 ? "active" : "pending");
+    let savedStatus = progress.find(p => p.id === (t.id ?? i))?.status;
+    if (!savedStatus && data?.ai_workflow?.task_statuses) {
+      const old = data.ai_workflow.task_statuses[t.id];
+      if (old === "Completed") savedStatus = "done";
+      else if (old === "In Progress") savedStatus = "active";
+    }
+    let status = savedStatus ?? (i === 0 ? "active" : "pending");
     if (stage >= 4) status = "done";
     
     return {
