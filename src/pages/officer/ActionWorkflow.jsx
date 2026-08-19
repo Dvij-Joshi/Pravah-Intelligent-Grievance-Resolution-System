@@ -17,13 +17,14 @@ import {
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge } from "../../components/Badges";
-
+import { updateGrievanceStatus } from "../../lib/grievanceService";
 import { useGrievances } from "../../hooks/useGrievances";
 
 const generateTasksFromGrievances = (grievances) => {
   return grievances.map((g, index) => ({
     id: `T-${g.dbId.substring(0, 6)}`,
     grievanceId: g.id,
+    grievanceDbId: g.dbId,
     grievanceTitle: g.title,
     category: g.category,
     priority: g.priority,
@@ -136,15 +137,34 @@ export default function ActionWorkflow() {
   const [expandedTask, setExpandedTask] = useState(null);
 
   React.useEffect(() => {
-    if (grievances && grievances.length > 0) {
+    // Only initialise once — don't overwrite local status changes on re-render
+    if (grievances && grievances.length > 0 && tasks.length === 0) {
       setTasks(generateTasksFromGrievances(grievances));
     }
   }, [grievances]);
 
-  const updateStatus = (taskId, newStatus) => {
+  // Map UI status labels back to Supabase status values
+  const statusToDb = {
+    'Pending':     'submitted',
+    'In Progress': 'in_progress',
+    'Completed':   'resolved',
+    'Overdue':     'submitted',
+  };
+
+  const updateStatus = async (taskId, newStatus) => {
+    // 1. Update local UI immediately (optimistic)
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
+    // 2. Persist to Supabase
+    const task = tasks.find((t) => t.id === taskId);
+    if (task?.grievanceDbId) {
+      try {
+        await updateGrievanceStatus(task.grievanceDbId, statusToDb[newStatus] || 'submitted');
+      } catch (err) {
+        console.error('Failed to save status:', err);
+      }
+    }
   };
 
   const filtered = activeTab === "All"
