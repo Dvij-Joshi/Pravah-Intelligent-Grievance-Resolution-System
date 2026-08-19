@@ -202,8 +202,7 @@ export default function EvidenceUpload() {
       setSubmitted(true);
     } catch (err) {
       console.error("AI Evidence workflow failed", err);
-      // Still show success UI for the demo flow
-      setSubmitted(true);
+      setErrors({ form: err.message || "Failed to upload evidence or analyze with AI." });
     } finally {
       setIsSubmitting(false);
     }
@@ -268,6 +267,17 @@ export default function EvidenceUpload() {
           Submit before & after photos for AI-powered verification before case closure
         </p>
       </div>
+
+      {errors.form && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3"
+        >
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <div className="text-sm font-medium">{errors.form}</div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Main Form */}
