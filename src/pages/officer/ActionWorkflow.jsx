@@ -319,7 +319,7 @@ export default function ActionWorkflow() {
                           </div>
                           <button
                             onClick={() =>
-                              navigate("/officer/upload-evidence", {
+                              navigate("/officer/evidence", {
                                 state: { grievanceId: g.id, grievanceDbId: g.dbId },
                               })
                             }

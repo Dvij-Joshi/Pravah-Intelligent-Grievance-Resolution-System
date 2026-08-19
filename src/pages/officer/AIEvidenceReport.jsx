@@ -111,7 +111,7 @@ export default function AIEvidenceReport() {
             There are no grievances with AI evidence reports yet. Submit evidence to generate reports.
           </p>
           <button
-            onClick={() => navigate('/officer/upload-evidence')}
+            onClick={() => navigate('/officer/evidence')}
             className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
           >
             Upload Evidence
