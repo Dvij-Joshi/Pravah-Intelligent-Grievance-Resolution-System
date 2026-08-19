@@ -9,26 +9,43 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
+// Normalize status from any casing variant to a standard title-case form
+function normalizeStatus(raw) {
+  if (!raw) return "Processing";
+  const s = raw.toLowerCase();
+  if (s === "closed") return "Closed";
+  if (s === "resolved") return "Resolved";
+  if (s === "in_progress" || s === "in progress") return "In Progress";
+  if (s === "new") return "New";
+  if (s === "overdue") return "Overdue";
+  if (s === "escalated") return "Escalated";
+  return raw;
+}
+
 function buildGrievanceState(data, gid) {
   const category = data?.ai_triage_data?.category || data?.category || "Processing...";
   const location = data?.location || "Unknown Location";
   const slaHours = data?.ai_triage_data?.estimated_sla_hours || 48;
   const priority = data?.ai_triage_data?.priority?.toUpperCase() || data?.priority?.toUpperCase() || "MEDIUM";
-  
+  const status = normalizeStatus(data?.status);
+
   let stage = 0;
   if (data?.ai_triage_data) stage = 1;
   if (data?.ai_workflow) stage = 2;
-  
+
   const progress = data?.task_progress || [];
-  const hasOldProgress = data?.ai_workflow?.task_statuses ? Object.values(data.ai_workflow.task_statuses).some(s => s === "Completed" || s === "In Progress") : false;
+  const hasOldProgress = data?.ai_workflow?.task_statuses
+    ? Object.values(data.ai_workflow.task_statuses).some(s => s === "Completed" || s === "In Progress")
+    : false;
   const hasProgress = progress.some(p => p.status === "done" || p.status === "active") || hasOldProgress;
-  const hasEvidence = data?.resolution_evidence_urls?.length > 0 || data?.ai_evidence_report;
-  
+  const hasEvidence = data?.ai_evidence_report;
+
   if (hasProgress) stage = 3;
   if (hasEvidence) stage = 4;
-  if (data?.ai_evidence_report?.recommendation === "APPROVE" || data?.status === "Resolved") stage = 5;
-  if (data?.status === "Closed") stage = 6;
-  if (data?.status === "In Progress" && stage >= 4) stage = 3;
+  if (data?.ai_evidence_report?.recommendation === "APPROVE" || status === "Resolved") stage = 5;
+  if (status === "Closed") stage = 6;
+  // If case is back In Progress (citizen refiled), roll back to repair stage
+  if (status === "In Progress" && stage >= 5) stage = 3;
 
   const aiTasks = data?.ai_workflow?.tasks || [];
 
@@ -80,7 +97,7 @@ function buildGrievanceState(data, gid) {
     submittedAt: data?.created_at ? new Date(data.created_at) : new Date(),
     slaHours,
     priority,
-    status: data?.status || "Processing",
+    status,
     actionPlan,
     timeline,
     stage
@@ -231,37 +248,82 @@ export default function TrackGrievance() {
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 mt-6 space-y-4">
 
+        {/* ── Case Closed: show evidence + refile option ── */}
         {state.status === "Closed" && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-slate-100 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm mb-2">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-slate-500 rounded-xl text-white flex-shrink-0 mt-0.5"><CheckCircle2 className="h-5 w-5" /></div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Case Completed & Closed</h3>
-                <p className="text-xs text-slate-600 mt-0.5">The issue has been resolved and verified.</p>
+            className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-slate-800 px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-xl"><CheckCircle2 className="h-5 w-5 text-white" /></div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Case Completed & Closed</h3>
+                  <p className="text-xs text-slate-300 mt-0.5">The issue was resolved and officially closed.</p>
+                </div>
               </div>
             </div>
-            <button onClick={() => navigate(`/feedback/${id}`)}
-              className="flex-shrink-0 flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap">
-              View Evidence / Refile <ChevronRight className="h-4 w-4" />
-            </button>
+            {rawGrievance?.ai_evidence_report && (
+              <div className="bg-white px-5 py-4 border-b border-slate-100">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">AI Evidence Report</p>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {rawGrievance.ai_evidence_report.beforeImageUrl && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-1">BEFORE</p>
+                      <img src={rawGrievance.ai_evidence_report.beforeImageUrl} alt="Before" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                    </div>
+                  )}
+                  {rawGrievance.ai_evidence_report.afterImageUrl && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 mb-1">AFTER</p>
+                      <img src={rawGrievance.ai_evidence_report.afterImageUrl} alt="After" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mb-2">{rawGrievance.ai_evidence_report.observations}</p>
+                {rawGrievance.ai_evidence_report.concerns?.length > 0 && (
+                  <p className="text-xs text-amber-600">⚠ {rawGrievance.ai_evidence_report.concerns.join(", ")}</p>
+                )}
+              </div>
+            )}
+            <div className="bg-white px-5 py-4">
+              <p className="text-xs text-slate-500 mb-3">Not satisfied with the resolution? You can refile this complaint.</p>
+              <button onClick={() => navigate(`/feedback/${id}`)}
+                className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm">
+                Refile Complaint <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </motion.div>
         )}
 
+        {/* ── Resolved: pending citizen verification ── */}
         {state.status === "Resolved" && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
             className="bg-green-50 border border-green-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm mb-2">
             <div className="flex items-start gap-3">
               <div className="p-2 bg-green-500 rounded-xl text-white flex-shrink-0 mt-0.5"><CheckCircle2 className="h-5 w-5" /></div>
               <div>
-                <h3 className="text-sm font-bold text-green-950">Resolution Ready</h3>
-                <p className="text-xs text-green-700 mt-0.5">Please verify the resolution to officially close this case.</p>
+                <h3 className="text-sm font-bold text-green-950">Resolution Ready for Verification</h3>
+                <p className="text-xs text-green-700 mt-0.5">The officer has marked this as resolved. Please verify to officially close the case.</p>
               </div>
             </div>
             <button onClick={() => navigate(`/feedback/${id}`)}
               className="flex-shrink-0 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap">
               Verify Resolution <ChevronRight className="h-4 w-4" />
             </button>
+          </motion.div>
+        )}
+
+        {/* ── In Progress refiled: show that complaint was refiled ── */}
+        {state.status === "In Progress" && rawGrievance?.feedback_text && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm mb-2">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-500 rounded-xl text-white flex-shrink-0 mt-0.5"><AlertTriangle className="h-5 w-5" /></div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">Complaint Refiled</h3>
+                <p className="text-xs text-amber-700 mt-0.5">You marked this as not resolved. The officer has been notified.</p>
+                <p className="text-xs text-slate-600 mt-2 italic">Your message: "{rawGrievance.feedback_text}"</p>
+              </div>
+            </div>
           </motion.div>
         )}
 

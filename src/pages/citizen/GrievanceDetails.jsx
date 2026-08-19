@@ -10,12 +10,26 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
+// Normalize status from any casing variant to a standard title-case form
+function normalizeStatus(raw) {
+  if (!raw) return "Processing";
+  const s = raw.toLowerCase();
+  if (s === "closed") return "Closed";
+  if (s === "resolved") return "Resolved";
+  if (s === "in_progress" || s === "in progress") return "In Progress";
+  if (s === "new") return "New";
+  if (s === "overdue") return "Overdue";
+  if (s === "escalated") return "Escalated";
+  return raw;
+}
+
 function buildGrievanceDetails(data, gid) {
   const category  = data?.ai_triage_data?.category || data?.category || "Processing...";
   const location  = data?.location || "Unknown Location";
   const desc      = data?.description || "";
   const slaHours  = data?.ai_triage_data?.estimated_sla_hours || 48;
   const priority  = data?.ai_triage_data?.priority?.toUpperCase() || data?.priority?.toUpperCase() || "MEDIUM";
+  const status = normalizeStatus(data?.status);
   const created = new Date(data?.created_at || Date.now());
   const hoursElapsed = Math.max(0, Math.round((Date.now() - created.getTime()) / (1000 * 60 * 60)));
   const pct = Math.min(100, Math.round((hoursElapsed / slaHours) * 100));
@@ -27,13 +41,13 @@ function buildGrievanceDetails(data, gid) {
   const progress = data?.task_progress || [];
   const hasOldProgress = data?.ai_workflow?.task_statuses ? Object.values(data.ai_workflow.task_statuses).some(s => s === "Completed" || s === "In Progress") : false;
   const hasProgress = progress.some(p => p.status === "done" || p.status === "active") || hasOldProgress;
-  const hasEvidence = data?.resolution_evidence_urls?.length > 0 || data?.ai_evidence_report;
+  const hasEvidence = data?.ai_evidence_report;
   
   if (hasProgress) stage = 3;
   if (hasEvidence) stage = 4;
-  if (data?.ai_evidence_report?.recommendation === "APPROVE" || data?.status === "Resolved" || data?.status === "Closed") stage = 5;
-  if (data?.status === "Closed") stage = 6;
-  if (data?.status === "In Progress" && stage >= 4) stage = 3;
+  if (data?.ai_evidence_report?.recommendation === "APPROVE" || status === "Resolved" || status === "Closed") stage = 5;
+  if (status === "Closed") stage = 6;
+  if (status === "In Progress" && stage >= 5) stage = 3;
 
   const steps = [
     { label: "Submitted",             done: true,        active: false },
@@ -70,13 +84,14 @@ function buildGrievanceDetails(data, gid) {
   if (data?.ai_triage_data) updates.push({ id: 2, time: "Triage Done", icon: "ai", msg: `Triage Agent  Priority: ${priority}, Dept: ${data.ai_triage_data.department || "Pending"}` });
   if (data?.ai_workflow)    updates.push({ id: 3, time: "Plan Ready",  icon: "ai", msg: `Resolution Planner generated a ${aiTasks.length}-step workflow` });
   if (hasEvidence)          updates.push({ id: 4, time: "Evidence", icon: "action", msg: "Officer submitted resolution evidence." });
-  if (data?.status === "Resolved") updates.push({ id: 5, time: "Resolved", icon: "action", msg: "Grievance pending your verification." });
+  if (status === "Resolved") updates.push({ id: 5, time: "Resolved", icon: "action", msg: "Grievance pending your verification." });
+  if (status === "Closed")  updates.push({ id: 6, time: "Closed", icon: "action", msg: "Case officially closed." });
 
   return {
     gid, category, location, description: desc,
     department: data?.ai_workflow?.primary_department || data?.ai_triage_data?.department || "Pending Assignment",
     officer: { name: data?.assigned_officer_name || "Pending Assignment", role: "Officer" },
-    priority, status: data?.status || (stage >= 2 ? "In Progress" : "Processing"),
+    priority, status,
     submittedAt: created.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + ", " + created.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     slaDeadline: `${slaHours}h from submission`,
     hoursElapsed, slaHours, slaPct: pct,
