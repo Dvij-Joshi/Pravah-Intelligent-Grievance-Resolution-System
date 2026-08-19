@@ -18,13 +18,21 @@ function buildGrievanceState(data, gid) {
   
   // Map tasks from AI workflow
   const aiTasks = data?.ai_workflow?.tasks || [];
-  let actionPlan = aiTasks.map((t, i) => ({
-    id: typeof t.id === 'string' ? parseInt(t.id, 10) : (t.id || (i + 1)),
-    title: t.title,
-    responsible: t.department || "Field Team",
-    deadline: `${Math.round(slaHours * ((i + 1) / Math.max(1, aiTasks.length)))} hrs`,
-    status: i === 0 ? "active" : "pending"
-  }));
+  let actionPlan = aiTasks.map((t, i) => {
+    const savedStatus = data?.ai_workflow?.task_statuses?.[t.id] || "Pending";
+    const statusMap = {
+      "Pending": "pending",
+      "In Progress": "active",
+      "Completed": "done"
+    };
+    return {
+      id: typeof t.id === 'string' ? parseInt(t.id, 10) : (t.id || (i + 1)),
+      title: t.title,
+      responsible: t.department || "Field Team",
+      deadline: `${Math.round(slaHours * ((i + 1) / Math.max(1, aiTasks.length)))} hrs`,
+      status: statusMap[savedStatus] || "pending"
+    };
+  });
 
   if (actionPlan.length === 0) {
     actionPlan = [
