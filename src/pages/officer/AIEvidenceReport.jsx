@@ -13,10 +13,13 @@ import {
   BarChart3,
   ImageIcon,
   FileText,
-  FilePlus2
+  FilePlus2,
+  Lock,
+  Send,
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { useGrievances } from "../../hooks/useGrievances";
+import { supabase } from "../../lib/supabase";
 
 const confidenceColor = (score) => {
   if (score >= 85) return { ring: "text-emerald-600", bg: "bg-emerald-50", bar: "bg-emerald-500", label: "High Confidence", labelColor: "text-emerald-700", labelBg: "bg-emerald-100 border-emerald-200" };
@@ -90,8 +93,10 @@ function CheckRow({ label, value }) {
 
 export default function AIEvidenceReport() {
   const navigate = useNavigate();
-  const { grievances } = useGrievances();
+  const { grievances, refetch } = useGrievances();
   const [selectedId, setSelectedId] = useState(null);
+  const [closing, setClosing] = useState(false);
+  const [closedId, setClosedId] = useState(null);
   
   const reportedGrievances = grievances.filter(g => g.ai_evidence_report || g.status === 'In Progress');
 
@@ -128,6 +133,30 @@ export default function AIEvidenceReport() {
   const report = reportData.ai_evidence_report;
   
   const recCfg = report ? recommendationConfig[report.recommendation || 'REVIEW'] : null;
+  const canFinalClose = report && report.confidence >= 80 && reportData.status !== 'Resolved';
+
+  const handleFinalClose = async () => {
+    if (!reportData?.dbId) return;
+    setClosing(true);
+    try {
+      const resolvedNote = `Grievance verified and closed by officer. AI Evidence Agent confirmed resolution with ${report.confidence}% confidence. Resolution: ${report.observations}`;
+      const { error } = await supabase
+        .from('grievances')
+        .update({
+          status: 'resolved',
+          resolved_note: resolvedNote,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('id', reportData.dbId);
+      if (error) throw error;
+      setClosedId(reportData.id);
+      if (refetch) refetch();
+    } catch (err) {
+      alert('Failed to close case: ' + err.message);
+    } finally {
+      setClosing(false);
+    }
+  };
 
   return (
     <OfficerLayout>
@@ -266,7 +295,7 @@ export default function AIEvidenceReport() {
               </div>
             </div>
 
-            <div className="space-y-5">
+              <div className="space-y-5">
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                 <h3 className="font-bold text-slate-900 text-center mb-1">Resolution Confidence</h3>
                 <p className="text-xs text-slate-400 text-center mb-4">AI confidence that the issue is resolved</p>
@@ -290,10 +319,95 @@ export default function AIEvidenceReport() {
                 </div>
                 <p className={`text-base font-bold mb-2 ${recCfg.color}`}>{recCfg.label}</p>
               </div>
+
+              {/* Final Close CTA */}
+              {canFinalClose ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-emerald-600 to-teal-600 rounded-xl p-5 text-white shadow-lg"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 size={18} />
+                    <h3 className="font-bold text-sm">Ready to Close</h3>
+                  </div>
+                  <p className="text-xs text-emerald-100 mb-4">
+                    AI confidence is <strong>{report.confidence}%</strong> — meets the ≥80% threshold.
+                    Closing the case will notify the citizen and mark it resolved.
+                  </p>
+                  <button
+                    onClick={handleFinalClose}
+                    disabled={closing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-emerald-700 font-bold rounded-xl text-sm shadow hover:bg-emerald-50 transition-colors disabled:opacity-60"
+                  >
+                    {closing ? (
+                      <><div className="w-4 h-4 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin" /> Closing Case…</>
+                    ) : (
+                      <><Send size={14} /> Final Submit &amp; Close Case</>
+                    )}
+                  </button>
+                </motion.div>
+              ) : report && report.confidence < 80 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Lock size={14} className="text-slate-400" />
+                    <h3 className="font-bold text-xs text-slate-500">Final Submit Locked</h3>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Confidence must be ≥80% to close the case. Current: <strong>{report.confidence}%</strong>.
+                    Resubmit with clearer evidence to proceed.
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
         </motion.div>
       )}
+
+      {/* Case Closed Success Modal */}
+      <AnimatePresence>
+        {closedId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 260 }}
+              className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center"
+            >
+              <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Case Closed! 🎉</h2>
+              <p className="text-slate-500 text-sm mb-1">
+                Grievance <span className="font-bold text-blue-700">{closedId}</span> has been marked as <span className="font-bold text-emerald-600">Resolved</span>.
+              </p>
+              <p className="text-slate-400 text-xs mb-6">
+                The citizen will see the case as resolved and can submit feedback on whether the issue was fixed.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => { setClosedId(null); navigate('/officer/complaints'); }}
+                  className="w-full px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-sm hover:bg-emerald-700 transition-colors"
+                >
+                  Go to All Complaints
+                </button>
+                <button
+                  onClick={() => setClosedId(null)}
+                  className="w-full px-5 py-2 text-slate-500 text-sm hover:text-slate-700 transition-colors"
+                >
+                  Stay on Report
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </OfficerLayout>
   );
 }
