@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-export async function runEvidenceAnalysis(grievance, beforeDesc, afterDesc, officerNote) {
+export async function runEvidenceAnalysis(grievance, beforeDesc, afterDesc, officerNote, afterImageUrl) {
   const prompt = `You are an AI Evidence Verification Agent.
 Compare the "before" and "after" descriptions of the grievance site provided by the officer, along with their resolution note.
 Output a JSON object exactly matching this structure:
@@ -34,6 +34,9 @@ Officer Resolution Note: ${officerNote || "Not provided"}`;
 
   const rawJson = completion.choices[0]?.message?.content;
   const report = JSON.parse(rawJson);
+  if (afterImageUrl) {
+    report.afterImageUrl = afterImageUrl;
+  }
 
   // Update Supabase
   await supabase

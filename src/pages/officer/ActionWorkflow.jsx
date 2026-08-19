@@ -305,7 +305,7 @@ export default function ActionWorkflow() {
                       </div>
 
                       {/* Submit Evidence CTA */}
-                      {allDone && (
+                      {allDone && (!g.ai_evidence_report || g.ai_evidence_report.recommendation === "REJECT") && (
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -326,6 +326,26 @@ export default function ActionWorkflow() {
                             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition-colors flex-shrink-0"
                           >
                             <Upload size={15} /> Submit Evidence
+                          </button>
+                        </motion.div>
+                      )}
+                      {allDone && g.ai_evidence_report && g.ai_evidence_report.recommendation !== "REJECT" && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-5 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl flex items-center justify-between gap-4"
+                        >
+                          <div>
+                            <p className="text-sm font-bold text-blue-800">✅ Evidence Submitted</p>
+                            <p className="text-xs text-blue-600 mt-0.5">
+                              The AI Evidence Agent has analyzed this case.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => navigate("/officer/evidence-report")}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition-colors flex-shrink-0"
+                          >
+                            <Bot size={15} /> View AI Report
                           </button>
                         </motion.div>
                       )}

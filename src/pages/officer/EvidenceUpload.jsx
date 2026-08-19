@@ -118,7 +118,11 @@ export default function EvidenceUpload() {
   const navigate = useNavigate();
   const location = useLocation();
   const { grievances } = useGrievances();
-  const actionableComplaints = grievances.filter((c) => c.status !== 'Resolved');
+  const actionableComplaints = grievances.filter((c) => {
+    if (c.status === 'Resolved') return false;
+    if (c.ai_evidence_report && c.ai_evidence_report.recommendation !== 'REJECT') return false;
+    return true;
+  });
   const [selectedId, setSelectedId] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [beforeImage, setBeforeImage] = useState(null);

@@ -34,10 +34,10 @@ router.post('/plan', async (req, res) => {
 
 router.post('/evidence', async (req, res) => {
   try {
-    const { grievance, beforeDesc, afterDesc, officerNote } = req.body;
+    const { grievance, beforeDesc, afterDesc, officerNote, afterImageUrl } = req.body;
     if (!grievance) return res.status(400).json({ error: 'Grievance data required' });
     
-    const report = await runEvidenceAnalysis(grievance, beforeDesc, afterDesc, officerNote);
+    const report = await runEvidenceAnalysis(grievance, beforeDesc, afterDesc, officerNote, afterImageUrl);
     res.json(report);
   } catch (error) {
     console.error('Evidence Agent Error:', error);
