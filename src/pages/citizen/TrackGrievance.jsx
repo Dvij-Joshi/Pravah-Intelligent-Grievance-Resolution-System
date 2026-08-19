@@ -28,6 +28,7 @@ function buildGrievanceState(data, gid) {
   if (hasEvidence) stage = 4;
   if (data?.ai_evidence_report?.recommendation === "APPROVE" || data?.status === "Resolved") stage = 5;
   if (data?.status === "Closed") stage = 6;
+  if (data?.status === "In Progress" && stage >= 4) stage = 3;
 
   const aiTasks = data?.ai_workflow?.tasks || [];
 
