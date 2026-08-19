@@ -1,64 +1,22 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
   Eye,
-  ShieldCheck,
   MapPin,
-  Clock,
   Hash,
   ChevronRight,
-  ThumbsUp,
-  ThumbsDown,
-  RotateCcw,
   Sparkles,
   BarChart3,
   ImageIcon,
   FileText,
+  FilePlus2
 } from "lucide-react";
 import OfficerLayout from "../../layouts/OfficerLayout";
-
 import { useGrievances } from "../../hooks/useGrievances";
-
-const generateReportsFromGrievances = (grievances) => {
-  if (!grievances || grievances.length === 0) return [];
-  
-  // For demo, generate an AI report for up to 3 grievances
-  return grievances.slice(0, 3).map((g, index) => {
-    const isWater = g.category === 'Water Supply';
-    const isRoad = g.category === 'Road Damage';
-    
-    return {
-      grievanceId: g.id,
-      grievanceTitle: g.title,
-      category: g.category,
-      location: g.location,
-      officerNote: isWater ? "Repaired the burst pipe and restored supply." : isRoad ? "Pothole filled with fresh bituminous mix." : "Issue addressed as per standard protocol.",
-      workOrderId: `WO-2025-${g.dbId.substring(0,4).toUpperCase()}`,
-      submittedAt: g.submitted,
-      analysedAt: "Just now",
-      agentModel: "Qwen 3.6 27B",
-      beforeImage: "https://via.placeholder.com/800x500?text=evidence-before.png",
-      afterImage: "https://via.placeholder.com/800x500?text=evidence-after.png",
-      confidence: 90 - index * 2,
-      evidenceQuality: "GOOD",
-      changeDetected: true,
-      visualConsistency: true,
-      locationVerified: true,
-      timestampValid: true,
-      beforeObservation: `Visible issue reported at ${g.location}.`,
-      afterObservation: `The area shows clear signs of recent repair/resolution matching the officer's notes.`,
-      concerns: index === 1 ? ["Minor cosmetic inconsistencies detected"] : [],
-      aiSummary: `Clear visual change detected between before and after images for ${g.title}. The repair is consistent with the officer report.`,
-      recommendation: "APPROVE",
-      recommendationNote: "Evidence is sufficient to confirm resolution. Recommend citizen verification.",
-    };
-  });
-};
-
 
 const confidenceColor = (score) => {
   if (score >= 85) return { ring: "text-emerald-600", bg: "bg-emerald-50", bar: "bg-emerald-500", label: "High Confidence", labelColor: "text-emerald-700", labelBg: "bg-emerald-100 border-emerald-200" };
@@ -113,7 +71,7 @@ function ConfidenceGauge({ score }) {
   );
 }
 
-function CheckRow({ label, value, positive = true }) {
+function CheckRow({ label, value }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
       <span className="text-sm text-slate-600">{label}</span>
@@ -133,65 +91,67 @@ function CheckRow({ label, value, positive = true }) {
 export default function AIEvidenceReport() {
   const navigate = useNavigate();
   const { grievances } = useGrievances();
-  const [reports, setReports] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [compareMode, setCompareMode] = useState(false);
+  
+  const reportedGrievances = grievances.filter(g => g.ai_evidence_report);
 
   React.useEffect(() => {
-    if (grievances && grievances.length > 0) {
-      const genReports = generateReportsFromGrievances(grievances);
-      setReports(genReports);
-      if (genReports.length > 0) {
-        setSelectedId(genReports[0].grievanceId);
-      }
+    if (reportedGrievances.length > 0 && !selectedId) {
+      setSelectedId(reportedGrievances[0].id);
     }
-  }, [grievances]);
+  }, [reportedGrievances, selectedId]);
 
-  if (!reports || reports.length === 0 || !selectedId) {
+  if (!reportedGrievances || reportedGrievances.length === 0) {
     return (
       <OfficerLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
-          <Sparkles className="h-12 w-12 mb-4 text-slate-300" />
-          <h2 className="text-lg font-bold text-slate-600">No AI Reports Available</h2>
-          <p className="text-sm">There are no grievances with uploaded evidence to analyze yet.</p>
+          <FilePlus2 className="h-16 w-16 mb-4 text-slate-300" />
+          <h2 className="text-xl font-bold text-slate-700 mb-2">No AI Reports Available</h2>
+          <p className="text-sm text-slate-500 mb-6 text-center max-w-sm">
+            There are no grievances with AI evidence reports yet. Submit evidence to generate reports.
+          </p>
+          <button
+            onClick={() => navigate('/officer/upload-evidence')}
+            className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
+          >
+            Upload Evidence
+          </button>
         </div>
       </OfficerLayout>
     );
   }
 
-  const report = reports.find((r) => r.grievanceId === selectedId) || reports[0];
-  const cfg = confidenceColor(report.confidence);
-  const recCfg = recommendationConfig[report.recommendation];
+  const reportData = reportedGrievances.find((g) => g.id === selectedId);
+  const report = reportData?.ai_evidence_report;
+  
+  if (!report) return null;
+
+  const recCfg = recommendationConfig[report.recommendation || 'REVIEW'];
 
   return (
     <OfficerLayout>
-      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">AI Evidence Report</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Generated by Evidence Agent · {report.agentModel}
-          </p>
+          <p className="text-sm text-slate-500 mt-1">Generated by Evidence Agent</p>
         </div>
-        {/* Report Selector */}
-        <div className="flex gap-2">
-          {reports.map((r) => (
+        <div className="flex flex-wrap gap-2">
+          {reportedGrievances.map((g) => (
             <button
-              key={r.grievanceId}
-              onClick={() => setSelectedId(r.grievanceId)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                selectedId === r.grievanceId
-                  ? "bg-blue-700 text-white border-blue-700"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
+              key={g.id}
+              onClick={() => setSelectedId(g.id)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                selectedId === g.id
+                  ? "bg-blue-700 text-white border-blue-700 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
               }`}
             >
-              {r.grievanceId}
+              {g.id}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Top: Grievance context bar */}
       <motion.div
         key={selectedId}
         initial={{ opacity: 0, y: 8 }}
@@ -199,16 +159,15 @@ export default function AIEvidenceReport() {
         className="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-4 mb-5 flex flex-wrap items-center gap-4"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded">{report.grievanceId}</span>
-          <span className="text-sm font-semibold text-slate-800 truncate">{report.grievanceTitle}</span>
+          <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded">{reportData.id}</span>
+          <span className="text-sm font-semibold text-slate-800 truncate">{reportData.title}</span>
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-500 ml-auto flex-wrap">
-          <span className="flex items-center gap-1"><Hash size={11} /> {report.workOrderId || "—"}</span>
-          <span className="flex items-center gap-1"><MapPin size={11} /> {report.location}</span>
-          <span className="flex items-center gap-1"><Clock size={11} /> Analysed {report.analysedAt}</span>
+          <span className="flex items-center gap-1"><Hash size={12} /> {reportData.category}</span>
+          <span className="flex items-center gap-1"><MapPin size={12} /> {reportData.location}</span>
         </div>
         <button
-          onClick={() => navigate(`/officer/complaints/${report.grievanceId}`)}
+          onClick={() => navigate(`/officer/complaints/${reportData.id}`)}
           className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline flex-shrink-0"
         >
           View Case <ChevronRight size={11} />
@@ -222,160 +181,89 @@ export default function AIEvidenceReport() {
         transition={{ duration: 0.3 }}
       >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left: Images + Analysis */}
           <div className="lg:col-span-2 space-y-5">
-
-            {/* Image Comparison */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                  <ImageIcon size={16} className="text-slate-400" /> Image Comparison
-                </h3>
-                <button
-                  onClick={() => setCompareMode((p) => !p)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                    compareMode ? "bg-blue-700 text-white border-blue-700" : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
-                  }`}
-                >
-                  {compareMode ? "Side by Side" : "Side by Side"}
-                </button>
-              </div>
+              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <ImageIcon size={16} className="text-slate-400" /> Evidence Comparison
+              </h3>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: "Before", src: report.beforeImage, obs: report.beforeObservation, tag: "bg-slate-700" },
-                  { label: "After", src: report.afterImage, obs: report.afterObservation, tag: "bg-emerald-600" },
-                ].map(({ label, src, obs, tag }) => (
-                  <div key={label}>
-                    <div className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-100">
-                      <img src={src} alt={label} className="w-full h-full object-cover" />
-                      <div className={`absolute top-2 left-2 text-xs font-bold text-white px-2 py-1 rounded-md ${tag}`}>
-                        {label}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">AI Observation</p>
-                      <p className="text-xs text-slate-700 leading-relaxed">{obs}</p>
+                <div>
+                  <div className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-100">
+                    {reportData.evidence_urls?.[0] ? (
+                      <img src={reportData.evidence_urls[0]} alt="Before" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">No Before Image</div>
+                    )}
+                    <div className="absolute top-2 left-2 text-xs font-bold text-white px-2.5 py-1 rounded-md bg-slate-800/80 backdrop-blur-sm shadow-sm">
+                      Citizen's Before Photo
                     </div>
                   </div>
-                ))}
+                </div>
+                <div>
+                  <div className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-100 border-2 border-emerald-400/50">
+                    {report.afterImageUrl ? (
+                      <img src={report.afterImageUrl} alt="After" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">No After Image</div>
+                    )}
+                    <div className="absolute top-2 left-2 text-xs font-bold text-white px-2.5 py-1 rounded-md bg-emerald-700/80 backdrop-blur-sm shadow-sm">
+                      Officer's Resolution Photo
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* AI Summary */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-3">
                 <Sparkles size={16} className="text-violet-500" />
-                AI Analysis Summary
-                <span className="text-xs text-violet-600 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full font-semibold ml-1">
-                  {report.agentModel}
-                </span>
+                AI Analysis Observations
               </h3>
               <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100">
-                {report.aiSummary}
+                {report.observations || "No observations provided."}
               </p>
 
-              {/* Concerns */}
-              {report.concerns.length > 0 && (
+              {report.concerns?.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                     <AlertTriangle size={12} /> Concerns Flagged
                   </h4>
                   <div className="space-y-2">
                     {report.concerns.map((c, i) => (
-                      <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs text-amber-700">{c}</span>
+                      <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                        <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-amber-800 font-medium">{c}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Officer's Note */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-3">
-                <FileText size={16} className="text-slate-400" /> Officer's Resolution Note
-              </h3>
-              <p className="text-sm text-slate-700 leading-relaxed">{report.officerNote}</p>
-            </div>
           </div>
 
-          {/* Right: Scores + Recommendation */}
           <div className="space-y-5">
-            {/* Confidence Gauge */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
               <h3 className="font-bold text-slate-900 text-center mb-1">Resolution Confidence</h3>
               <p className="text-xs text-slate-400 text-center mb-4">AI confidence that the issue is resolved</p>
-              <ConfidenceGauge score={report.confidence} />
+              <ConfidenceGauge score={report.confidence || 0} />
             </div>
 
-            {/* Verification Checks */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-1">
                 <BarChart3 size={15} className="text-slate-400" /> Verification Checks
               </h3>
               <p className="text-xs text-slate-400 mb-4">Automated checks run by the Evidence Agent</p>
               <div>
-                <CheckRow label="Change detected" value={report.changeDetected} />
-                <CheckRow label="Visual consistency" value={report.visualConsistency} />
-                <CheckRow label="Location verified" value={report.locationVerified} />
-                <CheckRow label="Timestamp valid" value={report.timestampValid} />
-                <CheckRow label="Evidence quality" value={report.evidenceQuality === "GOOD"} />
+                <CheckRow label="Change detected" value={report.change_detected} />
               </div>
             </div>
 
-            {/* Recommendation Box */}
             <div className={`rounded-xl border-2 p-5 ${recCfg.bg} ${recCfg.border}`}>
               <div className="flex items-center gap-2 mb-2">
                 <recCfg.icon className={`h-5 w-5 ${recCfg.color}`} />
                 <h3 className={`font-bold text-sm ${recCfg.color}`}>AI Recommendation</h3>
               </div>
               <p className={`text-base font-bold mb-2 ${recCfg.color}`}>{recCfg.label}</p>
-              <p className="text-xs text-slate-600 leading-relaxed">{report.recommendationNote}</p>
-            </div>
-
-            {/* Officer Decision */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="font-bold text-slate-900 mb-1">Officer Decision</h3>
-              <p className="text-xs text-slate-400 mb-4">
-                The AI recommends, but the final decision is yours.
-              </p>
-              <div className="space-y-2.5">
-                <button
-                  onClick={() => navigate(`/officer/complaints/${report.grievanceId}`)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                >
-                  <ThumbsUp size={15} /> Approve & Send to Citizen
-                </button>
-                <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 transition-colors">
-                  <ThumbsDown size={15} /> Reject Evidence
-                </button>
-                <button
-                  onClick={() => navigate("/officer/evidence")}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 transition-colors"
-                >
-                  <RotateCcw size={15} /> Request Re-upload
-                </button>
-              </div>
-            </div>
-
-            {/* Agent Metadata */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Report Metadata</p>
-              <div className="space-y-2 text-xs">
-                {[
-                  { label: "Evidence Agent", value: report.agentModel },
-                  { label: "Evidence submitted", value: report.submittedAt },
-                  { label: "Report generated", value: report.analysedAt },
-                  { label: "Evidence quality", value: report.evidenceQuality },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between gap-2">
-                    <span className="text-slate-400">{label}</span>
-                    <span className="text-slate-700 font-semibold text-right">{value}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>

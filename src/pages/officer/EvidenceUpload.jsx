@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useRef, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -20,6 +20,7 @@ import {
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge } from "../../components/Badges";
 import { useGrievances } from "../../hooks/useGrievances";
+import { supabase } from "../../lib/supabase";
 
 
 function ImageDropZone({ label, hint, value, onChange, icon: Icon = Camera }) {
@@ -64,16 +65,18 @@ function ImageDropZone({ label, hint, value, onChange, icon: Icon = Camera }) {
             <span className="text-xs text-white font-medium bg-black/40 px-2 py-1 rounded truncate max-w-[70%]">
               {value.name}
             </span>
-            <button
-              onClick={() => onChange(null)}
-              className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex-shrink-0"
-            >
-              <X size={12} />
-            </button>
+            {!value.isReadonly && (
+              <button
+                onClick={() => onChange(null)}
+                className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex-shrink-0"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
           <div className="absolute top-3 right-3">
-            <span className="flex items-center gap-1 text-xs bg-emerald-500 text-white px-2 py-1 rounded-full font-semibold">
-              <CheckCircle2 size={11} /> Uploaded
+            <span className="flex items-center gap-1 text-xs bg-emerald-500 text-white px-2 py-1 rounded-full font-semibold shadow-sm">
+              <CheckCircle2 size={11} /> {value.isReadonly ? 'Auto-filled' : 'Uploaded'}
             </span>
           </div>
         </motion.div>
@@ -113,6 +116,7 @@ function ImageDropZone({ label, hint, value, onChange, icon: Icon = Camera }) {
 
 export default function EvidenceUpload() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { grievances } = useGrievances();
   const actionableComplaints = grievances.filter((c) => c.status !== 'Resolved');
   const [selectedId, setSelectedId] = useState("");
@@ -125,6 +129,18 @@ export default function EvidenceUpload() {
   const [errors, setErrors] = useState({});
 
   const selectedComplaint = grievances.find((c) => c.id === selectedId);
+
+  useEffect(() => {
+    if (location.state?.grievanceDbId) {
+      const g = grievances.find(x => x.dbId === location.state.grievanceDbId);
+      if (g) {
+        setSelectedId(g.id);
+        if (g.evidence_urls?.length > 0) {
+          setBeforeImage({ url: g.evidence_urls[0], name: "Citizen's Before Photo", isReadonly: true });
+        }
+      }
+    }
+  }, [location.state, grievances]);
 
   const validate = () => {
     const e = {};
@@ -144,33 +160,40 @@ export default function EvidenceUpload() {
     setIsSubmitting(true);
 
     try {
-      // 1. Trigger Evidence Agent
-      // We pass simulated descriptions based on the category since we aren't sending image binaries to groq right now
-      const isRoad = selectedComplaint?.category === 'Road Damage';
-      const beforeDesc = isRoad ? "Large visible pothole on asphalt road" : "Visible issue requiring repair";
-      const afterDesc = isRoad ? "Pothole cleanly filled with fresh asphalt" : "Issue visually repaired and restored";
+      // 1. Upload After Image to Supabase Storage
+      const timestamp = new Date().getTime();
+      const filename = afterImage.file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const filePath = `officer-evidence/${selectedComplaint.dbId}/${timestamp}-${filename}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('evidence')
+        .upload(filePath, afterImage.file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('evidence')
+        .getPublicUrl(filePath);
 
+      // 2. Trigger Evidence Agent
       const evidenceRes = await fetch('http://localhost:3001/api/evidence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          grievance: selectedComplaint,
-          beforeDesc,
-          afterDesc,
-          officerNote: resolutionNote
+          grievance: { ...selectedComplaint, id: selectedComplaint.dbId },
+          beforeDesc: 'Citizen uploaded photo of issue',
+          afterDesc: 'Officer uploaded after-photo as evidence of resolution',
+          officerNote: resolutionNote,
+          afterImageUrl: publicUrl
         })
       });
       const evidenceReport = await evidenceRes.json();
-
-      // 2. Trigger Resolution Agent
-      await fetch('http://localhost:3001/api/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          grievance: selectedComplaint,
-          evidenceReport
-        })
-      });
+      
+      // 3. Update grievance status to in_progress
+      await supabase.from('grievances').update({ status: 'in_progress' }).eq('id', selectedComplaint.dbId);
 
       setSubmitted(true);
     } catch (err) {
