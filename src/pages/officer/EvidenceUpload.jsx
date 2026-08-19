@@ -120,7 +120,8 @@ export default function EvidenceUpload() {
   const { grievances } = useGrievances();
   const actionableComplaints = grievances.filter((c) => {
     if (c.status === 'Resolved') return false;
-    if (c.ai_evidence_report && c.ai_evidence_report.recommendation !== 'REJECT') return false;
+    if (!c.ai_evidence_report && c.status === 'In Progress') return false;
+    if (c.ai_evidence_report && c.ai_evidence_report.recommendation === 'APPROVE') return false;
     return true;
   });
   const [selectedId, setSelectedId] = useState("");
