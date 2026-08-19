@@ -31,7 +31,7 @@ Officer Resolution Note: ${officerNote || "Not provided"}`;
       { role: "system", content: "You output only valid JSON. Critically evaluate if the after description proves the grievance is resolved." },
       { role: "user", content: prompt }
     ],
-    model: "llama-3.3-70b-versatile",
+    model: "qwen/qwen3.6-27b",
     temperature: 0.1,
     response_format: { type: "json_object" }
   });
