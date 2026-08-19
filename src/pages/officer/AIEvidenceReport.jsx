@@ -93,7 +93,7 @@ export default function AIEvidenceReport() {
   const { grievances } = useGrievances();
   const [selectedId, setSelectedId] = useState(null);
   
-  const reportedGrievances = grievances.filter(g => g.ai_evidence_report || g.status === 'in_progress');
+  const reportedGrievances = grievances.filter(g => g.ai_evidence_report || g.status === 'In Progress');
 
   React.useEffect(() => {
     if (reportedGrievances.length > 0 && !selectedId) {
@@ -124,7 +124,7 @@ export default function AIEvidenceReport() {
   const reportData = reportedGrievances.find((g) => g.id === selectedId);
   if (!reportData) return null;
 
-  const isPending = !reportData.ai_evidence_report && reportData.status === 'in_progress';
+  const isPending = !reportData.ai_evidence_report && reportData.status === 'In Progress';
   const report = reportData.ai_evidence_report;
   
   const recCfg = report ? recommendationConfig[report.recommendation || 'REVIEW'] : null;
@@ -138,7 +138,7 @@ export default function AIEvidenceReport() {
         </div>
         <div className="flex flex-wrap gap-2">
           {reportedGrievances.map((g) => {
-            const pendingStatus = !g.ai_evidence_report && g.status === 'in_progress';
+            const pendingStatus = !g.ai_evidence_report && g.status === 'In Progress';
             return (
               <button
                 key={g.id}
