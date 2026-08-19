@@ -28,17 +28,31 @@ Officer Resolution Note: ${officerNote || "Not provided"}`;
 
   const completion = await groq.chat.completions.create({
     messages: [
-      { role: "system", content: "You output only valid JSON. Critically evaluate if the after description proves the grievance is resolved." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content: "You output ONLY a single valid JSON object with no extra text, no markdown, no explanation. Do not use a thinking block. Output the JSON immediately."
+      },
+      { role: "user", content: prompt + "\n\n/no_think\n\nRespond with only the JSON object:" }
     ],
     model: "qwen/qwen3.6-27b",
     temperature: 0.1,
-    response_format: { type: "json_object" }
+    max_tokens: 1024,
   });
 
-  const rawJson = completion.choices[0]?.message?.content;
-  console.log('[EvidenceAgent] Raw AI response:', rawJson);
-  const report = JSON.parse(rawJson);
+  const rawContent = completion.choices[0]?.message?.content || '';
+  console.log('[EvidenceAgent] Raw AI response:', rawContent);
+
+  // Extract JSON robustly — strip any <think>...</think> blocks and markdown fences
+  let rawJson = rawContent
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  // Find the first { ... } block
+  const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI did not return valid JSON: ' + rawJson.slice(0, 200));
+  const report = JSON.parse(jsonMatch[0]);
 
   if (afterImageUrl) report.afterImageUrl = afterImageUrl;
   if (beforeImageUrl) report.beforeImageUrl = beforeImageUrl;
