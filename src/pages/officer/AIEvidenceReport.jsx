@@ -143,9 +143,7 @@ export default function AIEvidenceReport() {
       const { error } = await supabase
         .from('grievances')
         .update({
-          status: 'resolved',
-          resolved_note: resolvedNote,
-          resolved_at: new Date().toISOString(),
+          status: 'resolved'
         })
         .eq('id', reportData.dbId);
       if (error) throw error;
