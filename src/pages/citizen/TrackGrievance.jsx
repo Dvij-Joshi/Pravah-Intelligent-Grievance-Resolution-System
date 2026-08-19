@@ -230,6 +230,23 @@ export default function TrackGrievance() {
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 mt-6 space-y-4">
 
+        {state.status === "Closed" && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-100 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm mb-2">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-slate-500 rounded-xl text-white flex-shrink-0 mt-0.5"><CheckCircle2 className="h-5 w-5" /></div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Case Completed & Closed</h3>
+                <p className="text-xs text-slate-600 mt-0.5">The issue has been resolved and verified.</p>
+              </div>
+            </div>
+            <button onClick={() => navigate(`/feedback/${id}`)}
+              className="flex-shrink-0 flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap">
+              View Evidence / Refile <ChevronRight className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+
         {state.status === "Resolved" && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
             className="bg-green-50 border border-green-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm mb-2">

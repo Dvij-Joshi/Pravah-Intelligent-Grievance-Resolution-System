@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -306,7 +306,9 @@ export default function ResolutionFeedback() {
 
               <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-8 shadow-sm relative overflow-hidden">
                 <div className="mb-8">
-                  <label className="block text-sm font-bold text-slate-800 mb-4 text-center">Is the issue fully resolved?</label>
+                  <label className="block text-sm font-bold text-slate-800 mb-4 text-center">
+                    {grievance?.status === 'Closed' ? "Are you experiencing issues again? Refile this case:" : "Is the issue fully resolved?"}
+                  </label>
                   <div className="grid sm:grid-cols-3 gap-3">
                     {VERDICTS.map((v) => (
                       <button type="button" key={v.id} onClick={() => setVerdict(v.id)}
