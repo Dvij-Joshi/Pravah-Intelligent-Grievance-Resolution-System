@@ -292,27 +292,80 @@ Description: ${description}`;
     // ── 3. Call AI Backend Pipeline Asynchronously ─────────────────────────────
     (async () => {
       try {
-        // Run Triage Agent
-        const triageRes = await fetch('http://localhost:3001/api/triage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ grievance: data })
-        });
-        const triageData = await triageRes.json();
+        // 1. Run Triage Agent
+        const triagePrompt = `You are a municipal triage agent. Analyze the following grievance and output a JSON object exactly matching this structure:
+{
+  "priority": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "category": "String (best fit)",
+  "estimated_sla_hours": Number,
+  "summary": "Short 1 sentence summary",
+  "tags": ["tag1", "tag2"]
+}
 
-        // Update Supabase with triage results using user's authenticated session
+Grievance Title: ${data.title}
+Description: ${data.description}
+Reported Category: ${data.category}`;
+
+        const triageRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-120b',
+            messages: [
+              { role: "system", content: "You output only valid JSON. No markdown formatting or extra text." },
+              { role: "user", content: triagePrompt }
+            ],
+            temperature: 0.1,
+            response_format: { type: "json_object" }
+          })
+        });
+
+        const triageJson = await triageRes.json();
+        const triageData = JSON.parse(triageJson.choices[0]?.message?.content);
+
+        // Update Supabase with triage results
         await supabase.from('grievances').update({ 
           ai_triage_data: triageData,
           priority: triageData.priority
         }).eq('id', data.id);
 
-        // Run Resolution Planner Agent
-        const planRes = await fetch('http://localhost:3001/api/plan', {
+        // 2. Run Resolution Planner Agent
+        const planPrompt = `You are a municipal operations planner. Generate a step-by-step action plan to resolve this grievance.
+Output a JSON object exactly matching this structure:
+{
+  "tasks": [
+    { "id": "1", "title": "Task title", "department": "Dept Name" }
+  ],
+  "primary_department": "String",
+  "sla_deadline": "ISO String date based on triage SLA"
+}
+
+Grievance: ${data.title}
+Description: ${data.description}
+Triage SLA: ${triageData.estimated_sla_hours} hours`;
+
+        const planRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ grievance: data, triageData })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-120b',
+            messages: [
+              { role: "system", content: "You output only valid JSON. Calculate the sla_deadline from the current time plus the estimated_sla_hours." },
+              { role: "user", content: planPrompt }
+            ],
+            temperature: 0.1,
+            response_format: { type: "json_object" }
+          })
         });
-        const planData = await planRes.json();
+
+        const planJson = await planRes.json();
+        const planData = JSON.parse(planJson.choices[0]?.message?.content);
 
         // Update Supabase with action plan
         await supabase.from('grievances').update({ 
@@ -320,7 +373,7 @@ Description: ${description}`;
         }).eq('id', data.id);
 
       } catch (apiErr) {
-        console.warn("AI Backend pipeline failed asynchronously:", apiErr);
+        console.warn("AI Pipeline failed asynchronously on client:", apiErr);
       }
     })();
     navigate(`/submitted/${data.id}`);
