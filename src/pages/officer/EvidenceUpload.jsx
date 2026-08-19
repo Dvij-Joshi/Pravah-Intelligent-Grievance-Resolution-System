@@ -165,45 +165,77 @@ export default function EvidenceUpload() {
     setIsSubmitting(true);
 
     try {
-      // 1. Upload After Image to Supabase Storage
-      const timestamp = new Date().getTime();
-      const filename = afterImage.file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const filePath = `officer-evidence/${selectedComplaint.dbId}/${timestamp}-${filename}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const timestamp = Date.now();
+      const dbId = selectedComplaint.dbId;
+
+      // 1a. Upload After Image
+      console.log('[Evidence] Uploading after image...');
+      const afterFilename = afterImage.file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const afterPath = `officer-evidence/${dbId}/${timestamp}-after-${afterFilename}`;
+      const { error: afterUploadError } = await supabase.storage
         .from('evidence')
-        .upload(filePath, afterImage.file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-        
-      if (uploadError) throw uploadError;
-      
-      const { data: { publicUrl } } = supabase.storage
-        .from('evidence')
-        .getPublicUrl(filePath);
+        .upload(afterPath, afterImage.file, { cacheControl: '3600', upsert: true });
+      if (afterUploadError) throw new Error(`After image upload failed: ${afterUploadError.message}`);
+
+      const { data: { publicUrl: afterUrl } } = supabase.storage.from('evidence').getPublicUrl(afterPath);
+      console.log('[Evidence] After image URL:', afterUrl);
+
+      // 1b. Upload Before Image (citizen photo or officer-supplied)
+      let beforeUrl = null;
+      if (beforeImage?.file) {
+        console.log('[Evidence] Uploading before image...');
+        const beforeFilename = beforeImage.file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const beforePath = `officer-evidence/${dbId}/${timestamp}-before-${beforeFilename}`;
+        const { error: beforeUploadError } = await supabase.storage
+          .from('evidence')
+          .upload(beforePath, beforeImage.file, { cacheControl: '3600', upsert: true });
+        if (beforeUploadError) throw new Error(`Before image upload failed: ${beforeUploadError.message}`);
+        const { data: { publicUrl } } = supabase.storage.from('evidence').getPublicUrl(beforePath);
+        beforeUrl = publicUrl;
+        console.log('[Evidence] Before image URL:', beforeUrl);
+      } else if (beforeImage?.url) {
+        beforeUrl = beforeImage.url;
+      }
 
       // 2. Trigger Evidence Agent
+      console.log('[Evidence] Calling evidence agent at http://localhost:3001/api/evidence...');
       const evidenceRes = await fetch('http://localhost:3001/api/evidence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          grievance: { ...selectedComplaint, id: selectedComplaint.dbId },
-          beforeDesc: 'Citizen uploaded photo of issue',
-          afterDesc: 'Officer uploaded after-photo as evidence of resolution',
+        body: JSON.stringify({
+          grievance: { ...selectedComplaint, id: dbId },
+          beforeDesc: beforeUrl ? `Before photo: ${beforeUrl}` : 'Citizen reported issue with no photo',
+          afterDesc: `Officer uploaded resolution photo: ${afterUrl}`,
           officerNote: resolutionNote,
-          afterImageUrl: publicUrl
+          afterImageUrl: afterUrl,
+          beforeImageUrl: beforeUrl,
         })
       });
-      const evidenceReport = await evidenceRes.json();
-      
-      // 3. Update grievance status to in_progress
-      await supabase.from('grievances').update({ status: 'in_progress' }).eq('id', selectedComplaint.dbId);
 
+      if (!evidenceRes.ok) {
+        const errBody = await evidenceRes.text();
+        throw new Error(`Evidence agent returned ${evidenceRes.status}: ${errBody}`);
+      }
+
+      const evidenceReport = await evidenceRes.json();
+      console.log('[Evidence] Agent report received:', evidenceReport);
+
+      if (evidenceReport.error) {
+        throw new Error(`Agent error: ${evidenceReport.error}`);
+      }
+
+      // 3. Mark grievance status as in_progress (AI is analyzing)
+      const { error: statusError } = await supabase
+        .from('grievances')
+        .update({ status: 'in_progress' })
+        .eq('id', dbId);
+      if (statusError) console.warn('[Evidence] Could not update status:', statusError.message);
+
+      console.log('[Evidence] Done! Showing success screen.');
       setSubmitted(true);
     } catch (err) {
-      console.error("AI Evidence workflow failed", err);
-      setErrors({ form: err.message || "Failed to upload evidence or analyze with AI." });
+      console.error('[Evidence] Workflow failed:', err);
+      setErrors({ form: err.message || 'Failed to upload evidence or contact AI agent. Is the backend server running?' });
     } finally {
       setIsSubmitting(false);
     }
