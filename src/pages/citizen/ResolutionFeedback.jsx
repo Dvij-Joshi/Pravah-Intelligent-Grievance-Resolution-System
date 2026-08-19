@@ -1,15 +1,15 @@
-import React, { useState } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, CheckCircle2, AlertTriangle, XCircle,
   Star, MessageSquare, Send, ArrowLeft, RefreshCw,
   Zap, Eye, TrendingUp, AlertOctagon, Home, ChevronRight,
-  Clock, User, Shield, RotateCcw,
+  Clock, User, Shield, RotateCcw, ImageIcon, Loader2
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// --- Constants ----------------------------------------------------------------
 const VERDICTS = [
   {
     id: "resolved",
@@ -49,7 +49,7 @@ const VERDICTS = [
   },
 ];
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// --- Sub-components -----------------------------------------------------------
 function StarRating({ value, onChange }) {
   const [hovered, setHovered] = useState(0);
   return (
@@ -74,7 +74,7 @@ function StarRating({ value, onChange }) {
   );
 }
 
-// ── Success state — case closed ───────────────────────────────────────────────
+// -- Success state — case closed -----------------------------------------------
 function CaseClosed({ gid, onHome }) {
   return (
     <motion.div
@@ -82,7 +82,6 @@ function CaseClosed({ gid, onHome }) {
       animate={{ opacity: 1, scale: 1 }}
       className="flex flex-col items-center text-center py-12 px-6"
     >
-      {/* Animated checkmark */}
       <div className="relative mb-6">
         <motion.div
           initial={{ scale: 0 }}
@@ -100,75 +99,23 @@ function CaseClosed({ gid, onHome }) {
         />
       </div>
 
-      <motion.h2
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="text-2xl font-extrabold text-slate-900 mb-2"
-      >
-        Case Closed 🎉
+      <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+        className="text-2xl font-extrabold text-slate-900 mb-2">
+        Case Closed ??
       </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="text-slate-500 text-sm max-w-xs mb-8"
-      >
+      <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+        className="text-slate-500 text-sm max-w-xs mb-8">
         Thank you for confirming. Grievance <span className="font-bold text-blue-700">{gid}</span> has been officially closed. The complete audit trail has been saved.
       </motion.p>
 
-      {/* Lifecycle recap */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="w-full max-w-sm bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 text-left"
-      >
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Completed Lifecycle</p>
-        {[
-          "Grievance submitted",
-          "AI triage & classification",
-          "Action plan generated",
-          "Field inspection completed",
-          "Evidence verified by AI (91%)",
-          "Citizen confirmed resolution",
-        ].map((step, i) => (
-          <motion.div key={i}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.65 + i * 0.07 }}
-            className="flex items-center gap-2.5 py-1.5"
-          >
-            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-            <span className="text-sm text-slate-700">{step}</span>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      {/* Recurrence note */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2 }}
-        className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-8 text-left w-full max-w-sm"
-      >
-        <TrendingUp className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-blue-700">
-          <span className="font-bold">Recurrence Agent activated.</span> This case will be analyzed for systemic patterns with similar complaints in your area.
-        </p>
-      </motion.div>
-
-      <button
-        onClick={() => onHome()}
-        className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md"
-      >
+      <button onClick={onHome} className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md">
         <Home className="h-4 w-4" /> Back to Dashboard
       </button>
     </motion.div>
   );
 }
 
-// ── Reopened state — case back in queue ───────────────────────────────────────
+// -- Reopened state — case back in queue ---------------------------------------
 function CaseReopened({ gid, verdict, onHome }) {
   return (
     <motion.div
@@ -194,57 +141,22 @@ function CaseReopened({ gid, verdict, onHome }) {
         We have not created a new complaint. Grievance <span className="font-bold text-blue-700">{gid}</span> has been reopened and escalated. The system is taking automatic action.
       </motion.p>
 
-      {/* Auto-actions cascade */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="w-full max-w-sm space-y-2 mb-6"
-      >
-        {[
-          { icon: RotateCcw,     label: "Existing case reopened",               color: "bg-amber-500" },
-          { icon: User,          label: "Officer Rahul Sharma notified",          color: "bg-blue-500"  },
-          { icon: AlertOctagon,  label: "Supervisor escalation triggered",        color: "bg-red-500"   },
-          { icon: Zap,           label: "New action plan being generated by AI",  color: "bg-purple-500"},
-          { icon: Shield,        label: "Audit trail updated — no closure bypass", color: "bg-green-500"},
-        ].map((item, i) => (
-          <motion.div key={i}
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.55 + i * 0.12 }}
-            className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-sm"
-          >
-            <div className={`w-7 h-7 rounded-full ${item.color} flex items-center justify-center flex-shrink-0`}>
-              <item.icon className="h-3.5 w-3.5 text-white" />
-            </div>
-            <span className="text-sm text-slate-700">{item.label}</span>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}
-        className="bg-slate-900 text-slate-200 rounded-xl px-4 py-3 text-xs text-left w-full max-w-sm mb-6 font-mono">
-        <p className="text-slate-400 mb-1">// System log</p>
-        <p><span className="text-green-400">REOPEN</span> {gid} — status: IN_PROGRESS</p>
-        <p><span className="text-amber-400">NOTIFY</span> officer_id: ward_officer_005</p>
-        <p><span className="text-red-400">ESCALATE</span> supervisor: district_supervisor_01</p>
-        <p><span className="text-purple-400">AGENT</span> resolution_planner — regenerating...</p>
-      </motion.div>
-
-      <button onClick={() => onHome()}
-        className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md">
+      <button onClick={onHome} className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md">
         <Home className="h-4 w-4" /> Back to Dashboard
       </button>
     </motion.div>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// --- Main Component -----------------------------------------------------------
 export default function ResolutionFeedback() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const gid = id?.slice(0, 8).toUpperCase() || 'GRV-XXXX';
+  const [grievance, setGrievance] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const gid = grievance?.readable_id || id?.slice(0, 8).toUpperCase() || 'GRV-XXXX';
 
   const [verdict, setVerdict]       = useState(null);
   const [rating, setRating]         = useState(0);
@@ -255,28 +167,78 @@ export default function ResolutionFeedback() {
 
   const needsComment = verdict === 'partial' || verdict === 'not_resolved';
 
+  useEffect(() => {
+    async function fetchGrievance() {
+      const { data } = await supabase.from('grievances').select('*').eq('id', id).single();
+      setGrievance(data);
+      setLoading(false);
+    }
+    fetchGrievance();
+  }, [id]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!verdict) return;
+    if (needsComment && !comment.trim()) {
+      alert("Please provide a comment explaining why it is not fully resolved.");
+      return;
+    }
     setIsSubmitting(true);
 
-    const newStatus = verdict === 'resolved' ? 'resolved' : 'in_progress';
-    await supabase.from('grievances').update({
+    const isResolved = verdict === 'resolved';
+    const newStatus = isResolved ? 'Closed' : 'In Progress';
+    
+    let updates = {
       feedback_rating: rating || null,
       feedback_text: comment.trim() || null,
       status: newStatus,
-    }).eq('id', id);
+    };
+
+    // If reopening, modify task progress & officer notes
+    if (!isResolved && grievance) {
+      const existingProgress = Array.isArray(grievance.task_progress) ? [...grievance.task_progress] : [];
+      let reversed = [...existingProgress].reverse();
+      let lastCompletedIdx = reversed.findIndex(p => p.status === 'done');
+      if (lastCompletedIdx !== -1) {
+        let originalIdx = existingProgress.length - 1 - lastCompletedIdx;
+        existingProgress[originalIdx].status = 'active';
+      } else if (existingProgress.length > 0) {
+        existingProgress[existingProgress.length - 1].status = 'active';
+      }
+      updates.task_progress = existingProgress;
+
+      const existingNotes = Array.isArray(grievance.officer_notes) ? [...grievance.officer_notes] : [];
+      existingNotes.push({
+        id: Date.now().toString(),
+        author: "Citizen Feedback",
+        text: `CITIZEN REOPENED ISSUE: ${comment.trim()}`,
+        time: new Date().toISOString()
+      });
+      updates.officer_notes = existingNotes;
+    }
+
+    await supabase.from('grievances').update(updates).eq('id', id);
 
     setIsSubmitting(false);
-    setOutcome(verdict === 'resolved' ? 'closed' : 'reopened');
+    setOutcome(isResolved ? 'closed' : 'reopened');
     setSubmitted(true);
   }
 
   const onHome = () => navigate('/dashboard');
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+      </div>
+    );
+  }
+
+  const beforeImage = grievance?.evidence_urls?.[0];
+  const afterImage = grievance?.resolution_evidence_urls?.[0];
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Nav */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -298,246 +260,120 @@ export default function ResolutionFeedback() {
       </nav>
 
       <main className="max-w-2xl mx-auto px-4 py-10">
-
         <AnimatePresence mode="wait">
-
-          {/* ── Post-submit outcomes ── */}
-          {submitted && outcome === "closed" && (
-            <CaseClosed key="closed" gid={gid} onHome={onHome} />
-          )}
-          {submitted && outcome === "reopened" && (
-            <CaseReopened key="reopened" gid={gid} verdict={verdict} onHome={onHome} />
-          )}
-
-          {/* ── Feedback form ── */}
-          {!submitted && (
-            <motion.div key="form"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-            >
-              {/* Header */}
+          {!submitted ? (
+            <motion.div key="form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="space-y-6">
+              
               <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-                  <MessageSquare className="h-8 w-8 text-blue-600" />
-                </div>
-                <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Is your issue resolved?</h1>
-                <p className="text-slate-500 text-sm">
-                  Your feedback helps us improve and prevents this case from being closed prematurely.
-                </p>
-                <p className="text-xs text-blue-600 font-semibold mt-1.5">
-                  Grievance <span className="font-mono">{gid}</span> has been marked as resolved by the officer.
+                <p className="text-sm font-bold tracking-widest text-blue-600 mb-2 uppercase">{gid}</p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Verify Resolution</h1>
+                <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
+                  The assigned officer has marked this grievance as resolved. Please confirm if the issue is actually fixed.
                 </p>
               </div>
 
-              {/* AI Evidence summary card */}
-              <motion.div
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-5"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Zap className="h-4 w-4 text-blue-600" />
-                  <h2 className="text-sm font-bold text-slate-700">AI Resolution Agent Review</h2>
-                  <span className="ml-auto text-xs bg-green-100 border border-green-200 text-green-700 px-2 py-0.5 rounded-full font-bold">91% Confidence</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1">Before</p>
-                    <p className="text-xs text-slate-700 font-medium">Water supply disrupted — multiple houses affected</p>
-                  </div>
-                  <div className="bg-green-50 border border-green-100 rounded-xl p-3">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1">After</p>
-                    <p className="text-xs text-green-700 font-medium">Pipeline repaired — supply restored to all households</p>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  {[
-                    "Complaint matches action taken",
-                    "Before/after evidence supports resolution",
-                    "Location verified by officer",
-                    "Timestamp within valid window",
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                      {item}
+              {/* Before & After Image Comparison */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <h2 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-slate-400" /> Evidence Comparison
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase">Before</p>
+                    <div className="aspect-square rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
+                      {beforeImage ? (
+                        <img src={beforeImage} alt="Before" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">No Image</div>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <p className="text-xs text-slate-500 italic">
-                    AI Recommendation: <span className="font-semibold text-slate-700">Approve for citizen verification</span>
-                  </p>
-                </div>
-              </motion.div>
-
-              <form onSubmit={handleSubmit}>
-                {/* Verdict selection */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                  className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-4"
-                >
-                  <h2 className="text-sm font-bold text-slate-700 mb-4">Your Verdict</h2>
-                  <div className="space-y-3">
-                    {VERDICTS.map((v) => {
-                      const isSelected = verdict === v.id;
-                      return (
-                        <motion.button
-                          key={v.id}
-                          type="button"
-                          onClick={() => setVerdict(v.id)}
-                          whileTap={{ scale: 0.98 }}
-                          className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-200 text-left ${
-                            isSelected
-                              ? `${v.bg} ${v.border} shadow-sm`
-                              : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          {/* Radio circle */}
-                          <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                            isSelected ? `${v.check} border-transparent` : "border-slate-300"
-                          }`}>
-                            {isSelected && <span className="w-2 h-2 bg-white rounded-full" />}
-                          </div>
-
-                          {/* Icon */}
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                            isSelected ? v.activeBg : "bg-slate-100"
-                          }`}>
-                            <v.icon className={`h-5 w-5 ${isSelected ? "text-white" : "text-slate-400"}`} />
-                          </div>
-
-                          {/* Text */}
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-bold transition-colors ${isSelected ? v.text : "text-slate-800"}`}>
-                              {v.label}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-0.5">{v.sub}</p>
-                          </div>
-                        </motion.button>
-                      );
-                    })}
                   </div>
-
-                  {/* Warning for non-resolved */}
-                  <AnimatePresence>
-                    {(verdict === "partial" || verdict === "not_resolved") && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="mt-4 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3 overflow-hidden"
-                      >
-                        <RefreshCw className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-700">
-                          <span className="font-bold">This case will be automatically reopened.</span> A new action will be generated and the supervisor will be notified. No new complaint needed.
-                        </p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-
-                {/* Additional comments */}
-                <AnimatePresence>
-                  {verdict && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-4 overflow-hidden"
-                    >
-                      <label htmlFor="fb-comment" className="block text-sm font-bold text-slate-700 mb-1">
-                        Additional Comments
-                        {needsComment && <span className="text-red-500 ml-1">*</span>}
-                        {!needsComment && <span className="text-slate-400 font-normal ml-1">(optional)</span>}
-                      </label>
-                      <p className="text-xs text-slate-400 mb-3">
-                        {needsComment
-                          ? "Please describe what is still wrong — this helps the officer prioritize correctly."
-                          : "Any additional feedback about the resolution process?"}
-                      </p>
-                      <textarea
-                        id="fb-comment"
-                        value={comment}
-                        onChange={e => setComment(e.target.value.slice(0, 500))}
-                        rows={3}
-                        placeholder={needsComment
-                          ? "e.g. Water supply restored partially — pressure is still very low in upper floors..."
-                          : "e.g. Officer was very responsive and professional..."}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 text-sm placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-all"
-                      />
-                      <div className="flex justify-end mt-1">
-                        <span className="text-xs text-slate-400 font-mono">{comment.length}/500</span>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Service rating */}
-                <AnimatePresence>
-                  {verdict && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-6 overflow-hidden"
-                    >
-                      <h2 className="text-sm font-bold text-slate-700 mb-1">Rate the Service</h2>
-                      <p className="text-xs text-slate-400 mb-3">How satisfied are you with how this was handled?</p>
-                      <StarRating value={rating} onChange={setRating} />
-                      {rating > 0 && (
-                        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                          className="mt-2 text-xs text-slate-500">
-                          {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][rating]} · {rating}/5 stars
-                        </motion.p>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-green-600 uppercase">After (Resolved)</p>
+                    <div className="aspect-square rounded-xl bg-green-50 overflow-hidden border border-green-200">
+                      {afterImage ? (
+                        <img src={afterImage} alt="After" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-green-600 text-xs text-center px-4">
+                          Resolution marked without image
+                        </div>
                       )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                {/* Submit */}
-                <AnimatePresence>
-                  {verdict && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex flex-col gap-3"
-                    >
-                      <button
-                        type="submit"
-                        disabled={isSubmitting || (needsComment && !comment.trim())}
-                        className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-                      >
-                        <AnimatePresence mode="wait">
-                          {isSubmitting ? (
-                            <motion.span key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              className="flex items-center gap-2">
-                              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                              </svg>
-                              Submitting feedback...
-                            </motion.span>
-                          ) : (
-                            <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              className="flex items-center gap-2">
-                              <Send className="h-4 w-4" />
-                              Submit Feedback
-                            </motion.span>
-                          )}
-                        </AnimatePresence>
+              <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-8 shadow-sm relative overflow-hidden">
+                <div className="mb-8">
+                  <label className="block text-sm font-bold text-slate-800 mb-4 text-center">Is the issue fully resolved?</label>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    {VERDICTS.map((v) => (
+                      <button type="button" key={v.id} onClick={() => setVerdict(v.id)}
+                        className={`relative p-4 rounded-xl border-2 text-left transition-all duration-200 flex flex-col items-center justify-center text-center gap-2 overflow-hidden ${
+                          verdict === v.id ? `${v.border} ${v.bg} shadow-sm ring-1 ring-[${v.border}]` : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        }`}>
+                        <v.icon className={`h-8 w-8 ${verdict === v.id ? v.text : 'text-slate-400'}`} />
+                        <div>
+                          <p className={`text-sm font-bold ${verdict === v.id ? v.text : 'text-slate-700'}`}>{v.label}</p>
+                          <p className={`text-[10px] mt-1 ${verdict === v.id ? v.text + ' opacity-80' : 'text-slate-400'}`}>{v.sub}</p>
+                        </div>
+                        {verdict === v.id && (
+                          <div className={`absolute top-2 right-2 w-4 h-4 rounded-full ${v.check} text-white flex items-center justify-center`}>
+                            <CheckCircle2 size={12} />
+                          </div>
+                        )}
                       </button>
+                    ))}
+                  </div>
+                </div>
 
-                      {needsComment && !comment.trim() && (
-                        <p className="text-center text-xs text-red-500">Please describe what is still wrong before submitting.</p>
+                <AnimatePresence>
+                  {verdict && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-6 overflow-hidden">
+                      <hr className="border-slate-100" />
+                      {needsComment && (
+                        <div>
+                          <label className="block text-sm font-bold text-slate-800 mb-2 flex items-center justify-between">
+                            Please explain why <span className="text-[10px] font-normal text-red-500 bg-red-50 px-2 py-0.5 rounded">*Required</span>
+                          </label>
+                          <textarea
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            placeholder="What part of the work is incomplete or unsatisfactory?"
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[100px] resize-y"
+                            required
+                          />
+                        </div>
                       )}
 
-                      <p className="text-center text-xs text-slate-400">
-                        Your feedback is final and will be used to update this case in the audit trail.
-                      </p>
+                      {verdict === 'resolved' && (
+                        <div className="flex flex-col items-center">
+                          <label className="block text-sm font-bold text-slate-800 mb-3 text-center">Rate the resolution speed & quality</label>
+                          <StarRating value={rating} onChange={setRating} />
+                        </div>
+                      )}
+
+                      <button type="submit" disabled={isSubmitting || (needsComment && !comment.trim())}
+                        className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl transition-all shadow-md active:scale-[0.98]">
+                        {isSubmitting ? (
+                          <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
+                        ) : (
+                          <><Send className="h-4 w-4" /> Submit Decision</>
+                        )}
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </form>
+            </motion.div>
+          ) : (
+            <motion.div key="success" className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden min-h-[500px] flex items-center justify-center">
+              {outcome === 'closed' ? (
+                <CaseClosed gid={gid} onHome={onHome} />
+              ) : (
+                <CaseReopened gid={gid} verdict={verdict} onHome={onHome} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>

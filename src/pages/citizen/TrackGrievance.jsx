@@ -5,32 +5,41 @@ import {
   ShieldCheck, ArrowLeft, Clock, MapPin, User, Zap,
   CheckCircle2, Circle, AlertTriangle, ChevronRight,
   Bell, TrendingUp, FileSearch, GitBranch, BarChart2,
-  AlertOctagon, RefreshCw, Activity, Loader2,
+  AlertOctagon, RefreshCw, Activity, Loader2, ListChecks
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-// ─── Mock data factory ────────────────────────────────────────────────────────
 function buildGrievanceState(data, gid) {
   const category = data?.ai_triage_data?.category || data?.category || "Processing...";
   const location = data?.location || "Unknown Location";
   const slaHours = data?.ai_triage_data?.estimated_sla_hours || 48;
   const priority = data?.ai_triage_data?.priority?.toUpperCase() || data?.priority?.toUpperCase() || "MEDIUM";
   
-  // Map tasks from AI workflow
+  let stage = 0;
+  if (data?.ai_triage_data) stage = 1;
+  if (data?.ai_workflow) stage = 2;
+  
+  const progress = data?.task_progress || [];
+  const hasProgress = progress.some(p => p.status === "done" || p.status === "active");
+  const hasEvidence = data?.resolution_evidence_urls?.length > 0 || data?.ai_evidence_report;
+  
+  if (hasProgress) stage = 3;
+  if (hasEvidence) stage = 4;
+  if (data?.ai_evidence_report?.recommendation === "APPROVE" || data?.status === "Resolved") stage = 5;
+  if (data?.status === "Closed") stage = 6;
+
   const aiTasks = data?.ai_workflow?.tasks || [];
+
   let actionPlan = aiTasks.map((t, i) => {
-    const savedStatus = data?.ai_workflow?.task_statuses?.[t.id] || "Pending";
-    const statusMap = {
-      "Pending": "pending",
-      "In Progress": "active",
-      "Completed": "done"
-    };
+    const saved = progress.find(p => p.id === (t.id ?? i));
+    let status = saved?.status ?? (i === 0 ? "active" : "pending");
+    if (stage >= 4) status = "done"; // Auto-complete if evidence submitted
     return {
-      id: typeof t.id === 'string' ? parseInt(t.id, 10) : (t.id || (i + 1)),
+      id: t.id ?? i,
       title: t.title,
       responsible: t.department || "Field Team",
       deadline: `${Math.round(slaHours * ((i + 1) / Math.max(1, aiTasks.length)))} hrs`,
-      status: statusMap[savedStatus] || "pending"
+      status,
     };
   });
 
@@ -50,6 +59,9 @@ function buildGrievanceState(data, gid) {
   if (data?.ai_workflow) {
     timeline.push({ time: "Plan Ready", event: "Resolution Planner generated action plan", type: "ai" });
   }
+  if (data?.status === "Resolved") {
+    timeline.push({ time: data?.resolved_at ? new Date(data.resolved_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Done", event: "Officer marked grievance as Resolved", type: "action" });
+  }
 
   return {
     gid,
@@ -57,16 +69,17 @@ function buildGrievanceState(data, gid) {
     location,
     description: data?.description || "",
     department: data?.ai_workflow?.primary_department || "Pending Assignment",
-    officer: "Pending Assignment",
+    officer: data?.assigned_officer_name || "Pending Assignment",
     submittedAt: data?.created_at ? new Date(data.created_at) : new Date(),
     slaHours,
     priority,
+    status: data?.status || "Processing",
     actionPlan,
     timeline,
+    stage
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   done:    { bg: "bg-green-100",  text: "text-green-700",  border: "border-green-200",  icon: "green"  },
   active:  { bg: "bg-blue-100",   text: "text-blue-700",   border: "border-blue-200",   icon: "blue"   },
@@ -109,11 +122,11 @@ function SlaBar({ hoursElapsed, slaHours }) {
 
 function AgentPipeline({ stage }) {
   const agents = [
-    { label: "Triage Agent",       model: "GPT-OSS 120B", done: stage >= 0, active: false },
-    { label: "Resolution Planner", model: "GPT-OSS 120B", done: stage >= 1, active: false },
-    { label: "SLA Engine",         model: "Rules Engine",  done: stage >= 1, active: stage === 1 },
-    { label: "Evidence Agent",     model: "Qwen 3.6 27B",  done: stage >= 3, active: stage === 2 },
-    { label: "Resolution Agent",   model: "GPT-OSS 120B",  done: stage >= 4, active: stage === 3 },
+    { label: "Triage Agent",       model: "GPT-OSS 120B", done: stage >= 1, active: stage === 0 },
+    { label: "Resolution Planner", model: "GPT-OSS 120B", done: stage >= 2, active: stage === 1 },
+    { label: "SLA Engine",         model: "Rules Engine",  done: stage >= 2, active: stage === 1 },
+    { label: "Evidence Agent",     model: "Qwen 3.6 27B",  done: stage >= 6, active: stage >= 2 && stage < 6 }, // simplified for demo
+    { label: "Resolution Agent",   model: "GPT-OSS 120B",  done: stage >= 6, active: stage >= 2 && stage < 6 },
   ];
   return (
     <div className="flex items-center gap-0 overflow-x-auto pb-1">
@@ -147,118 +160,29 @@ function AgentPipeline({ stage }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 export default function TrackGrievance() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [grievance, setGrievance] = useState(null);
+  const [rawGrievance, setRawGrievance] = useState(null);
   const [dbLoading, setDbLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("plan");
 
   useEffect(() => {
     async function fetchGrievance() {
-      const { data } = await supabase.from('grievances').select('*').eq('id', id).single();
-      setGrievance(data);
+      const { data } = await supabase.from("grievances").select("*").eq("id", id).single();
+      setRawGrievance(data);
       setDbLoading(false);
     }
     fetchGrievance();
 
     const channel = supabase
-      .channel(`grievance-track-${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'grievances', filter: `id=eq.${id}` },
-        (payload) => {
-          setGrievance(payload.new);
-        }
-      )
+      .channel(`track-grievance-${id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "grievances", filter: `id=eq.${id}` },
+        (payload) => { setRawGrievance(payload.new); })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [id]);
-
-  const gid = grievance?.readable_id || 'GRV-XXXX';
-  const state = buildGrievanceState(grievance, gid);
-  const [hoursElapsed, setHoursElapsed] = useState(2);
-  const [agentStage, setAgentStage] = useState(grievance?.ai_workflow ? 1 : (grievance?.ai_triage_data ? 0 : -1));
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [escalated, setEscalated] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [activeTab, setActiveTab] = useState("plan");
-  const [localState, setLocalState] = useState(null);
-
-  useEffect(() => {
-    if (grievance) {
-      setLocalState(buildGrievanceState(grievance, grievance.readable_id));
-      setAgentStage(grievance.ai_workflow ? 1 : (grievance.ai_triage_data ? 0 : -1));
-    }
-  }, [grievance]);
-
-  function pushNotif(msg, type = "info") {
-    const id = Date.now();
-    setNotifications(p => [{ id, msg, type }, ...p.slice(0, 3)]);
-    setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), 4000);
-  }
-
-  async function simulateTime() {
-    if (isSimulating) return;
-    setIsSimulating(true);
-
-    // Advance 24 hours in stages
-    for (let h = 6; h <= 24; h += 6) {
-      await new Promise(r => setTimeout(r, 700));
-      setHoursElapsed(prev => prev + 6);
-    }
-
-    // Trigger escalation if no action taken (simulated)
-    await new Promise(r => setTimeout(r, 500));
-    setEscalated(true);
-    pushNotif("⚠️ SLA risk HIGH — officer reminder sent", "warn");
-
-    await new Promise(r => setTimeout(r, 900));
-    pushNotif("🔔 Supervisor notified: Rahul Sharma has not filed inspection", "warn");
-
-    // Advance action plan — step 2 completes
-    setLocalState(prev => prev ? ({
-      ...prev,
-      actionPlan: prev.actionPlan.map(t =>
-        t.id === 2 ? { ...t, status: "done" } :
-        t.id === 3 ? { ...t, status: "active" } : t
-      ),
-      timeline: [
-        { time: "now", event: "Supervisor escalation triggered automatically", type: "escalate" },
-        { time: "now", event: "Pipeline inspection completed by Field Team", type: "action" },
-        ...prev.timeline,
-      ],
-    }) : prev);
-
-    await new Promise(r => setTimeout(r, 800));
-    setAgentStage(2);
-    pushNotif("✅ Field inspection complete — cause identification started", "success");
-    setIsSimulating(false);
-  }
-
-  const slaRisk = hoursElapsed / state.slaHours;
-  const overallStatus =
-    slaRisk >= 1 ? "Overdue" :
-    slaRisk >= 0.8 ? "SLA At Risk" :
-    escalated ? "Escalated" :
-    "In Progress";
-
-  const statusStyle = {
-    "In Progress": "bg-blue-100 text-blue-700 border-blue-200",
-    "SLA At Risk": "bg-amber-100 text-amber-700 border-amber-200",
-    "Overdue":     "bg-red-100 text-red-700 border-red-200",
-    "Escalated":   "bg-purple-100 text-purple-700 border-purple-200",
-  }[overallStatus];
-
-  const TABS = [
-    { id: "plan",     label: "Action Plan",  icon: GitBranch },
-    { id: "timeline", label: "Timeline",     icon: Clock },
-    { id: "ai",       label: "AI Pipeline",  icon: Zap },
-  ];
 
   if (dbLoading) {
     return (
@@ -268,288 +192,204 @@ export default function TrackGrievance() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Floating notifications */}
-      <div className="fixed top-4 right-4 z-[100] space-y-2 w-72">
-        <AnimatePresence>
-          {notifications.map(n => (
-            <motion.div
-              key={n.id}
-              initial={{ opacity: 0, x: 60 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 60 }}
-              className={`px-4 py-3 rounded-xl text-sm font-medium shadow-lg border ${
-                n.type === "warn"    ? "bg-amber-50 border-amber-200 text-amber-800" :
-                n.type === "success" ? "bg-green-50 border-green-200 text-green-800" :
-                                       "bg-white border-slate-200 text-slate-800"
-              }`}
-            >
-              {n.msg}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+  const gid = rawGrievance?.readable_id || id.slice(0, 8).toUpperCase();
+  const state = buildGrievanceState(rawGrievance, gid);
 
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
+  const hoursElapsed = Math.max(0, Math.round((Date.now() - state.submittedAt.getTime()) / (1000 * 60 * 60)));
+
+  const TABS = [
+    { id: "plan",     label: "Action Plan", Icon: GitBranch },
+    { id: "timeline", label: "Timeline",    Icon: Clock },
+    { id: "pipeline", label: "AI Pipeline", Icon: Zap },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-10">
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => navigate(-1)}
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors">
+            <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-6 w-6 text-blue-700" />
-              <span className="font-bold text-slate-900 text-lg">Pravah</span>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase leading-none">Live Tracking</span>
+              <span className="font-bold text-slate-800 leading-tight">Pravah Intelligence</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate(`/grievance/${id}`)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-all hover:bg-blue-100">
-              View Details
-            </button>
-            <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-              Citizen Portal
-            </span>
-          </div>
+          <button onClick={() => navigate(`/grievance/${id}`)} className="text-sm font-semibold text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
+            View Details
+          </button>
         </div>
       </nav>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 mt-6 space-y-4">
 
-        {/* ── Header card ─────────────────────────── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+        {state.status === "Resolved" && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-green-50 border border-green-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm mb-2">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-green-500 rounded-xl text-white flex-shrink-0 mt-0.5"><CheckCircle2 className="h-5 w-5" /></div>
+              <div>
+                <h3 className="text-sm font-bold text-green-950">Resolution Ready</h3>
+                <p className="text-xs text-green-700 mt-0.5">Please verify the resolution to officially close this case.</p>
+              </div>
+            </div>
+            <button onClick={() => navigate(`/feedback/${id}`)}
+              className="flex-shrink-0 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all duration-200 shadow-sm whitespace-nowrap">
+              Verify Resolution <ChevronRight className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+
+        {/* Hero Info Card */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mb-1">Grievance ID</p>
-              <h1 className="text-2xl font-extrabold text-blue-700 font-mono">{gid}</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Grievance ID</p>
+              <h1 className="text-xl font-extrabold text-blue-700 font-mono tracking-tight">{state.gid}</h1>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${PRIORITY_BADGE[state.priority]}`}>
-                {state.priority} PRIORITY
-              </span>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${statusStyle} flex items-center gap-1`}>
-                {(overallStatus === "SLA At Risk" || overallStatus === "Overdue") && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse inline-block" />
-                )}
-                {overallStatus}
-              </span>
+            <div className="flex gap-2">
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${PRIORITY_BADGE[state.priority]}`}>{state.priority} PRIORITY</span>
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                state.status === "Resolved" ? "bg-green-100 text-green-700 border-green-200" :
+                "bg-blue-100 text-blue-700 border-blue-200"
+              }`}>{state.status}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
-            <div className="flex items-center gap-2 text-slate-600">
+          <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-5">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
               <MapPin className="h-4 w-4 text-slate-400 flex-shrink-0" />
-              {state.location}
+              <span className="truncate">{state.location}</span>
             </div>
-            <div className="flex items-center gap-2 text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
               <User className="h-4 w-4 text-slate-400 flex-shrink-0" />
-              {state.officer}
+              <span className="truncate">{state.officer}</span>
             </div>
-            <div className="flex items-center gap-2 text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
               <BarChart2 className="h-4 w-4 text-slate-400 flex-shrink-0" />
-              {state.category}
+              <span className="truncate">{state.category}</span>
             </div>
-            <div className="flex items-center gap-2 text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
               <Bell className="h-4 w-4 text-slate-400 flex-shrink-0" />
-              {state.department}
+              <span className="truncate">{state.department}</span>
             </div>
           </div>
-
-          {/* SLA Bar */}
           <SlaBar hoursElapsed={hoursElapsed} slaHours={state.slaHours} />
+        </div>
 
-          {/* Escalation banner */}
-          <AnimatePresence>
-            {escalated && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                className="mt-4 flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
-                <AlertOctagon className="h-5 w-5 text-purple-600 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-purple-800">Escalated to Supervisor</p>
-                  <p className="text-xs text-purple-600">No field inspection recorded after 24h — system escalated automatically.</p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-
-        {/* ── Demo simulation button ──────────────── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <button onClick={simulateTime} disabled={isSimulating}
-            className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl border-2 border-dashed border-blue-300 text-blue-700 font-semibold text-sm hover:bg-blue-50 hover:border-blue-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed">
-            <RefreshCw className={`h-4 w-4 ${isSimulating ? "animate-spin" : ""}`} />
-            {isSimulating ? "Simulating 24 hours…" : "⚡ Simulate 24 Hours (Watch AI Automation)"}
-          </button>
-          <p className="text-center text-xs text-slate-400 mt-1.5">
-            Advances time to trigger SLA monitoring, officer reminders &amp; auto-escalation
-          </p>
-        </motion.div>
-
-        {/* ── Tabs ────────────────────────────────── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-4">
-            {TABS.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}>
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
+        {/* Live Sync Banner */}
+        <div className="bg-blue-50/50 border border-blue-200 border-dashed rounded-xl p-3 flex flex-col items-center justify-center text-center">
+          <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+            </span>
+            Live Synchronization Active
           </div>
+          <p className="text-[10px] text-slate-500 mt-1">Watching database for officer updates & AI events</p>
+        </div>
 
-          <AnimatePresence mode="wait">
+        {/* Tabs */}
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`flex-1 py-2.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all duration-200 ${
+                activeTab === t.id ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}>
+              <t.Icon className="h-3.5 w-3.5" />
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-            {/* Action Plan Tab */}
-            {activeTab === "plan" && (
-              <motion.div key="plan"
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-blue-600" />
-                  AI-Generated Resolution Plan
-                </h2>
-                <p className="text-xs text-slate-400 mb-5">Generated by Resolution Planner Agent (GPT-OSS 120B)</p>
-                <div className="space-y-3">
-                  {state.actionPlan.map((task, i) => {
-                    const s = STATUS_COLORS[task.status] || STATUS_COLORS.pending;
-                    return (
-                      <motion.div key={task.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.06 }}
-                        className={`flex items-start gap-3 p-3.5 rounded-xl border ${s.bg} ${s.border}`}>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                          task.status === "done"   ? "bg-green-500" :
-                          task.status === "active" ? "bg-blue-500 animate-pulse" :
-                                                     "bg-slate-300"
-                        }`}>
-                          {task.status === "done" ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                          ) : (
-                            <span className="text-white text-[10px] font-bold">{task.id}</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-semibold ${s.text} ${task.status === "done" ? "line-through opacity-70" : ""}`}>
-                            {task.title}
-                          </p>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            <span className="text-xs text-slate-500">{task.responsible}</span>
-                            <span className="text-xs text-slate-400">· Due: {task.deadline}</span>
-                            {task.dep && <span className="text-xs text-slate-400 italic">· Needs: {task.dep}</span>}
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border flex-shrink-0 ${s.bg} ${s.text} ${s.border}`}>
-                          {task.status}
-                        </span>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
+        <AnimatePresence mode="wait">
+          {/* Action Plan */}
+          {activeTab === "plan" && (
+            <motion.div key="plan" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><GitBranch className="h-4 w-4 text-blue-600" /> AI-Generated Resolution Plan</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Generated by Resolution Planner Agent (GPT-OSS 120B) ï¿½ Watched in real-time</p>
+              </div>
+              <div className="space-y-2.5">
+                {state.actionPlan.map((task, i) => {
+                  const colors = STATUS_COLORS[task.status] || STATUS_COLORS.pending;
+                  return (
+                    <motion.div key={i} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className={`relative overflow-hidden flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border}`}>
+                      {task.status === "active" && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                      )}
+                      <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center ${task.status === "done" ? "bg-green-500 text-white" : task.status === "active" ? "bg-blue-500 text-white" : "bg-slate-200 text-slate-500"}`}>
+                        {task.status === "done" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+                      </div>
+                      <div className="flex-1 min-w-0 z-10">
+                        <p className={`text-sm font-semibold truncate ${colors.text} ${task.status === "done" ? "line-through opacity-70" : ""}`}>{task.title}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{task.responsible} ï¿½ Due: {task.deadline}</p>
+                      </div>
+                      <div className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${colors.bg} ${colors.text} ${colors.border} z-10`}>
+                        {task.status}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
 
-            {/* Timeline Tab */}
-            {activeTab === "timeline" && (
-              <motion.div key="timeline"
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 className="text-sm font-bold text-slate-700 mb-5 flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-blue-600" />
-                  Event Timeline
-                </h2>
-                <div className="relative pl-6 space-y-5">
-                  <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200 rounded" />
-                  {state.timeline.map((evt, i) => {
-                    const dot =
-                      evt.type === "ai"       ? "bg-blue-500" :
-                      evt.type === "escalate" ? "bg-purple-500" :
-                      evt.type === "action"   ? "bg-green-500" :
-                      evt.type === "assign"   ? "bg-amber-500" :
-                                                "bg-slate-400";
-                    const Icon =
-                      evt.type === "ai"       ? Zap :
-                      evt.type === "escalate" ? AlertOctagon :
-                      evt.type === "action"   ? CheckCircle2 :
-                                                Bell;
-                    return (
-                      <motion.div key={i}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.08 }}
-                        className="flex items-start gap-3">
-                        <div className={`absolute left-0 w-4 h-4 rounded-full ${dot} flex items-center justify-center -translate-x-0.5`}
-                          style={{ top: `${i * 52 + 2}px` }}>
-                          <Icon className="h-2.5 w-2.5 text-white" />
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 flex-1">
-                          <p className="text-sm font-medium text-slate-800">{evt.event}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{evt.time}</p>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-
-            {/* AI Pipeline Tab */}
-            {activeTab === "ai" && (
-              <motion.div key="ai"
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-blue-600" />
-                    Multi-Agent Pipeline Status
-                  </h2>
-                  <p className="text-xs text-slate-400 mb-5">Live view of AI agents processing this grievance</p>
-                  <AgentPipeline stage={agentStage} />
-                </div>
-                <div className="border-t border-slate-100 pt-5">
-                  <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-green-400 space-y-0.5 overflow-x-auto">
-                    <p><span className="text-slate-500">{'{'}</span></p>
-                    {grievance?.ai_triage_data ? (
-                      Object.entries(grievance.ai_triage_data).map(([key, val], index, arr) => {
-                        const isLast = index === arr.length - 1;
-                        let valSpan;
-                        if (Array.isArray(val)) {
-                          valSpan = <>[ {val.map((v, i) => <React.Fragment key={i}><span className="text-amber-300">"{v}"</span>{i < val.length - 1 ? ", " : ""}</React.Fragment>)} ]</>;
-                        } else if (typeof val === 'number') {
-                          valSpan = <span className="text-purple-400">{val}</span>;
-                        } else {
-                          valSpan = <span className={key === 'priority' ? "text-red-400" : "text-amber-300"}>"{val}"</span>;
-                        }
-                        return (
-                          <p key={key}>&nbsp;&nbsp;<span className="text-blue-400">"{key}"</span>: {valSpan}{!isLast && ","}</p>
-                        );
-                      })
-                    ) : (
-                      <p>&nbsp;&nbsp;<span className="text-slate-400 italic">// Waiting for AI Agent...</span></p>
-                    )}
-                    <p><span className="text-slate-500">{'}'}</span></p>
+          {/* Timeline */}
+          {activeTab === "timeline" && (
+            <motion.div key="timeline" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-1.5"><Clock className="h-4 w-4 text-blue-600" /> Event Timeline</h3>
+              <div className="relative pl-5 space-y-5">
+                <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-slate-100 rounded" />
+                {state.timeline.map((item, i) => (
+                  <div key={i} className="relative">
+                    <div className="absolute -left-[25px] mt-1 w-4 h-4 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center shadow-sm">
+                      <div className={`w-2 h-2 rounded-full ${item.type === 'ai' ? 'bg-violet-500' : 'bg-blue-500'}`} />
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                      <p className="text-sm text-slate-800 font-medium">{item.event}</p>
+                      <p className="text-xs text-slate-400 mt-1">{item.time}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-blue-800">Recurrence Check</p>
-                    <p className="text-xs text-blue-600">3 similar complaints detected in {state.location.split(",")[0]}. Monitoring for systemic pattern.</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+                ))}
+              </div>
+            </motion.div>
+          )}
 
-          </AnimatePresence>
-        </motion.div>
+          {/* AI Pipeline */}
+          {activeTab === "pipeline" && (
+            <motion.div key="pipeline" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="space-y-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-blue-600" /> Multi-Agent Pipeline Status</h3>
+                <p className="text-[10px] text-slate-400 mb-6">Live view of AI agents processing this grievance</p>
+                <AgentPipeline stage={state.stage} />
+              </div>
+
+              {rawGrievance?.ai_triage_data && (
+                <div className="bg-[#0A0F1E] rounded-2xl p-5 shadow-sm font-mono text-[11px] leading-relaxed overflow-hidden">
+                  <p className="text-slate-400">{"{"}</p>
+                  <p className="pl-4"><span className="text-blue-400">"tags"</span>: <span className="text-amber-300">[ {rawGrievance.ai_triage_data.tags?.map(t => `"${t}"`).join(", ")} ]</span>,</p>
+                  <p className="pl-4"><span className="text-blue-400">"summary"</span>: <span className="text-amber-300">"{rawGrievance.ai_triage_data.summary}"</span>,</p>
+                  <p className="pl-4"><span className="text-blue-400">"category"</span>: <span className="text-amber-300">"{rawGrievance.ai_triage_data.category}"</span>,</p>
+                  <p className="pl-4"><span className="text-blue-400">"priority"</span>: <span className="text-red-400">"{rawGrievance.ai_triage_data.priority}"</span>,</p>
+                  <p className="pl-4"><span className="text-blue-400">"estimated_sla_hours"</span>: <span className="text-purple-400">{rawGrievance.ai_triage_data.estimated_sla_hours}</span></p>
+                  <p className="text-slate-400">{"}"}</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
+      
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes shimmer {
+          100% { transform: translateX(100%); }
+        }
+      `}} />
     </div>
   );
 }

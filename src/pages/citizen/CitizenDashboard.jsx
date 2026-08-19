@@ -18,21 +18,23 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 
 function statusBadgeClass(status) {
-  if (status === 'resolved') return 'bg-green-50 text-green-700 border-green-200';
-  if (status === 'in_progress') return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (status === 'pending_feedback') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (!status) return 'bg-slate-100 text-slate-600 border-slate-200';
+  const s = status.toLowerCase();
+  if (s === 'resolved') return 'bg-green-50 text-green-700 border-green-200';
+  if (s === 'in progress' || s === 'in_progress') return 'bg-blue-50 text-blue-700 border-blue-200';
+  if (s === 'pending feedback' || s === 'pending_feedback') return 'bg-amber-50 text-amber-700 border-amber-200';
   return 'bg-slate-100 text-slate-600 border-slate-200';
 }
 
 function statusLabel(status) {
-  const map = {
-    submitted: 'Submitted',
-    in_progress: 'In Progress',
-    resolved: 'Resolved',
-    pending_feedback: 'Pending Feedback',
-    closed: 'Closed',
-  };
-  return map[status] || status;
+  if (!status) return 'Unknown';
+  const s = status.toLowerCase();
+  if (s === 'resolved') return 'Resolved';
+  if (s === 'in progress' || s === 'in_progress') return 'In Progress';
+  if (s === 'pending feedback' || s === 'pending_feedback') return 'Pending Feedback';
+  if (s === 'submitted') return 'Submitted';
+  if (s === 'closed') return 'Closed';
+  return status;
 }
 
 export default function CitizenDashboard() {
@@ -72,9 +74,20 @@ export default function CitizenDashboard() {
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Citizen';
   const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-  const activeCount = grievances.filter(g => g.status === 'in_progress' || g.status === 'submitted').length;
-  const resolvedCount = grievances.filter(g => g.status === 'resolved' || g.status === 'closed').length;
-  const actionCount = grievances.filter(g => g.status === 'pending_feedback').length;
+  const activeCount = grievances.filter(g => {
+    const s = g.status?.toLowerCase();
+    return s === 'in_progress' || s === 'in progress' || s === 'submitted';
+  }).length;
+  
+  const resolvedCount = grievances.filter(g => {
+    const s = g.status?.toLowerCase();
+    return s === 'resolved' || s === 'closed';
+  }).length;
+  
+  const actionCount = grievances.filter(g => {
+    const s = g.status?.toLowerCase();
+    return s === 'pending_feedback' || s === 'pending feedback';
+  }).length;
 
   async function handleSignOut() {
     await signOut();
