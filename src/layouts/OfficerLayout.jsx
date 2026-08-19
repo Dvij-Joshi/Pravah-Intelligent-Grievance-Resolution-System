@@ -11,16 +11,20 @@ import {
   LogOut,
   Bell,
   ChevronRight,
+  GitPullRequest,
+  FileCheck,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
   { label: "Dashboard",        icon: LayoutDashboard, path: "/officer/dashboard" },
-  { label: "All Complaints",   icon: FileText,        path: "/officer/complaints" },
-  { label: "Action Workflow",  icon: Workflow,        path: "/officer/workflow" },
+  { label: "All Complaints",   icon: ClipboardList,   path: "/officer/complaints" },
+  { label: "Action Workflow",  icon: GitPullRequest,  path: "/officer/workflow" },
   { label: "Evidence Upload",  icon: Upload,          path: "/officer/evidence" },
-  { label: "AI Evidence Report", icon: ClipboardList, path: "/officer/evidence-report" },
+  { label: "AI Evidence Report", icon: FileCheck,     path: "/officer/evidence-report" },
   { label: "Escalations",      icon: AlertTriangle,   path: "/officer/escalations" },
+  { label: "Test AI Agents",   icon: Bot,             path: "/officer/test-agents" }
 ];
 
 export default function OfficerLayout({ children }) {

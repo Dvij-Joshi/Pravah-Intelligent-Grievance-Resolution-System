@@ -24,6 +24,7 @@ import ActionWorkflow from './pages/officer/ActionWorkflow';
 import EvidenceUpload from './pages/officer/EvidenceUpload';
 import AIEvidenceReport from './pages/officer/AIEvidenceReport';
 import Escalations from './pages/officer/Escalations';
+import TestAIAgents from './pages/TestAIAgents';
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/officer/evidence"        element={<ProtectedRoute><EvidenceUpload /></ProtectedRoute>} />
           <Route path="/officer/evidence-report" element={<ProtectedRoute><AIEvidenceReport /></ProtectedRoute>} />
           <Route path="/officer/escalations"     element={<ProtectedRoute><Escalations /></ProtectedRoute>} />
+          <Route path="/officer/test-agents"     element={<ProtectedRoute><TestAIAgents /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
