@@ -234,8 +234,8 @@ export default function ResolutionFeedback() {
     );
   }
 
-  const beforeImage = grievance?.evidence_urls?.[0];
-  const afterImage = grievance?.resolution_evidence_urls?.[0];
+  const beforeImage = grievance?.ai_evidence_report?.beforeImageUrl || grievance?.evidence_urls?.[0];
+  const afterImage  = grievance?.ai_evidence_report?.afterImageUrl  || grievance?.resolution_evidence_urls?.[0];
 
   return (
     <div className="min-h-screen bg-slate-50">
