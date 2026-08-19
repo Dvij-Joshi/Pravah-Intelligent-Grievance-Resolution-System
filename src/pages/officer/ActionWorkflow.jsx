@@ -327,7 +327,7 @@ export default function ActionWorkflow() {
                       )}
 
                       {/* Submit / Resubmit Evidence CTA */}
-                      {allDone && (!g.ai_evidence_report && g.status !== 'In Progress' || (g.ai_evidence_report && g.ai_evidence_report.recommendation !== "APPROVE")) && (
+                      {allDone && g.status !== 'Resolved' && (!g.ai_evidence_report && g.status !== 'In Progress' || (g.ai_evidence_report && g.ai_evidence_report.recommendation !== "APPROVE")) && (
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -364,25 +364,27 @@ export default function ActionWorkflow() {
                         </motion.div>
                       )}
 
-                      {/* Evidence Approved CTA */}
-                      {allDone && g.ai_evidence_report && g.ai_evidence_report.recommendation === "APPROVE" && (
+                      {/* Evidence Approved / Case Resolved CTA */}
+                      {allDone && (g.status === 'Resolved' || (g.ai_evidence_report && g.ai_evidence_report.recommendation === "APPROVE")) && (
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           className="mt-5 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl flex items-center justify-between gap-4"
                         >
                           <div>
-                            <p className="text-sm font-bold text-blue-800">✅ Resolution Approved</p>
+                            <p className="text-sm font-bold text-blue-800">✅ {g.status === 'Resolved' ? 'Case Resolved' : 'Resolution Approved'}</p>
                             <p className="text-xs text-blue-600 mt-0.5">
-                              The AI Evidence Agent has verified and approved this case.
+                              {g.status === 'Resolved' ? 'This case has been successfully resolved and closed.' : 'The AI Evidence Agent has verified and approved this case.'}
                             </p>
                           </div>
-                          <button
-                            onClick={() => navigate("/officer/evidence-report")}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition-colors flex-shrink-0"
-                          >
-                            <Bot size={15} /> View AI Report
-                          </button>
+                          {g.ai_evidence_report && (
+                            <button
+                              onClick={() => navigate("/officer/evidence-report")}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition-colors flex-shrink-0"
+                            >
+                              <Bot size={15} /> View AI Report
+                            </button>
+                          )}
                         </motion.div>
                       )}
                     </div>
