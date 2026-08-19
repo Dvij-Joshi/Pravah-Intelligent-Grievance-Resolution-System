@@ -12,23 +12,65 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Static mock data for the grievance ──────────────────────────────────────
 function buildGrievanceDetails(data, gid) {
-  const category   = data?.category  || "Water Supply";
-  const location   = data?.location  || "Ward 5, Near Government School, Main Road";
-  const desc       = data?.description || "There has been no water supply in our area for the last 4 days. Multiple households in Ward 5 are affected. Children and elderly people are facing severe difficulties.";
-  const slaHours   = { "Water Supply": 48, "Road Infrastructure": 72, "Electricity": 24 }[category] ?? 48;
-  const hoursElapsed = 14;
-  const pct        = Math.round((hoursElapsed / slaHours) * 100);
+  const category   = data?.ai_triage_data?.category || data?.category || "Processing...";
+  const location   = data?.location || "Unknown Location";
+  const desc       = data?.description || "";
+  const slaHours   = data?.ai_triage_data?.estimated_sla_hours || 48;
+  const priority   = data?.ai_triage_data?.priority?.toUpperCase() || data?.priority?.toUpperCase() || "MEDIUM";
+  
+  const created = new Date(data?.created_at || Date.now());
+  const hoursElapsed = Math.max(0, Math.round((Date.now() - created.getTime()) / (1000 * 60 * 60)));
+  const pct        = Math.min(100, Math.round((hoursElapsed / slaHours) * 100));
+
+  let stage = 0;
+  if (data?.ai_triage_data) stage = 1;
+  if (data?.ai_workflow) stage = 2;
+
+  const steps = [
+    { label: "Submitted",              done: true,  active: false },
+    { label: "AI Triage & Structured", done: stage >= 1,  active: stage === 0 },
+    { label: "Action Plan Generated",  done: stage >= 2,  active: stage === 1 },
+    { label: "Field Inspection",       done: stage >= 3,  active: stage === 2 },
+    { label: "Repair & Resolution",    done: stage >= 4,  active: stage === 3 },
+    { label: "Evidence Verified",      done: stage >= 5,  active: stage === 4 },
+    { label: "Closed",                 done: stage >= 6,  active: stage === 5 },
+  ];
+
+  const aiTasks = data?.ai_workflow?.tasks || [];
+  let tasks = aiTasks.map((t, i) => ({
+    id: typeof t.id === 'string' ? parseInt(t.id, 10) || (i + 1) : (t.id || (i + 1)),
+    title: t.title,
+    assignee: t.department || "Field Team",
+    status: i === 0 ? "active" : "pending",
+    time: `${Math.round(slaHours * ((i + 1) / Math.max(1, aiTasks.length)))}h deadline`
+  }));
+
+  if (tasks.length === 0) {
+    tasks = [
+      { id: 1, title: "Waiting for AI Action Plan...", assignee: "AI Agent", status: "pending", time: "--" }
+    ];
+  }
+
+  const updates = [
+    { id: 1, time: created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), icon: "submit", msg: "Grievance submitted successfully. ID assigned: " + gid }
+  ];
+  if (data?.ai_triage_data) {
+    updates.push({ id: 2, time: "Triage Done", icon: "ai", msg: `Triage Agent processed complaint — Priority: ${priority}, Dept: ${data.ai_triage_data.department || data.ai_workflow?.primary_department || 'Pending'}` });
+  }
+  if (data?.ai_workflow) {
+    updates.push({ id: 3, time: "Plan Ready", icon: "ai", msg: `Resolution Planner generated a ${aiTasks.length}-step action workflow` });
+  }
 
   return {
     gid,
     category,
     location,
     description: desc,
-    department: "Water Supply Department",
-    officer: { name: "Rahul Sharma", role: "Ward Officer", ward: "Ward 5" },
-    priority: "HIGH",
-    status: "In Progress",
-    submittedAt: "18 Aug 2026, 12:22 AM",
+    department: data?.ai_workflow?.primary_department || data?.ai_triage_data?.department || "Pending Assignment",
+    officer: { name: "Pending Assignment", role: "Officer", ward: "" },
+    priority,
+    status: stage >= 2 ? "In Progress" : "Processing",
+    submittedAt: created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ", " + created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     slaDeadline: `${slaHours}h from submission`,
     hoursElapsed,
     slaHours,
@@ -36,45 +78,15 @@ function buildGrievanceDetails(data, gid) {
     filesCount: data?.files?.length || 0,
     isAnonymous: data?.contact === null,
     contactName: data?.contact?.name || null,
-
-    // AI triage output
-    triage: {
-      summary: `Water supply unavailable in ${location.split(",")[0]} for multiple days`,
-      urgency: ["Essential service disruption", "Multiple citizens affected", "4-day duration"],
-      affectedPop: "Multiple households",
-      confidence: 0.94,
+    triage: data?.ai_triage_data || {
+      summary: "Waiting for Triage Agent...",
+      urgency_reason: [],
+      affected_population: "Unknown",
+      confidence: 0
     },
-
-    // Resolution steps
-    steps: [
-      { label: "Submitted",              done: true,  active: false },
-      { label: "AI Triage & Structured", done: true,  active: false },
-      { label: "Action Plan Generated",  done: true,  active: false },
-      { label: "Field Inspection",       done: false, active: true  },
-      { label: "Repair & Resolution",    done: false, active: false },
-      { label: "Evidence Verified",      done: false, active: false },
-      { label: "Closed",                 done: false, active: false },
-    ],
-
-    // Action tasks (from Resolution Planner)
-    tasks: [
-      { id: 1, title: "Verify complaint location",  assignee: "Ward Officer", status: "done",    time: "4h deadline"  },
-      { id: 2, title: "Inspect water pipeline",     assignee: "Field Team",   status: "active",  time: "12h deadline" },
-      { id: 3, title: "Identify fault cause",       assignee: "Water Dept",   status: "pending", time: "After inspect"},
-      { id: 4, title: "Repair fault",               assignee: "Maintenance",  status: "pending", time: "After cause"  },
-      { id: 5, title: "Upload resolution evidence", assignee: "Field Team",   status: "pending", time: "After repair" },
-      { id: 6, title: "Citizen verification",       assignee: "You",          status: "pending", time: "After verify" },
-    ],
-
-    // Updates feed
-    updates: [
-      { id: 1, time: "12:22 AM", icon: "submit",   msg: "Grievance submitted successfully. ID assigned: " + gid },
-      { id: 2, time: "12:22 AM", icon: "ai",       msg: "Triage Agent processed your complaint — Priority: HIGH, Dept: Water Supply" },
-      { id: 3, time: "12:23 AM", icon: "ai",       msg: "Resolution Planner generated a 6-step action workflow" },
-      { id: 4, time: "12:24 AM", icon: "assign",   msg: "Assigned to Rahul Sharma (Ward Officer, Ward 5)" },
-      { id: 5, time: "1:00 AM",  icon: "action",   msg: "Ward Officer confirmed complaint location — Step 1 complete" },
-      { id: 6, time: "1:30 AM",  icon: "active",   msg: "Field team dispatched for pipeline inspection — Step 2 in progress" },
-    ],
+    steps,
+    tasks,
+    updates,
   };
 }
 
@@ -186,6 +198,21 @@ export default function GrievanceDetails() {
       setDbLoading(false);
     }
     fetchGrievance();
+
+    const channel = supabase
+      .channel(`grievance-details-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'grievances', filter: `id=eq.${id}` },
+        (payload) => {
+          setGrievance(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   if (dbLoading) {
@@ -490,18 +517,26 @@ export default function GrievanceDetails() {
                     <span className="ml-auto text-xs bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-mono">GPT-OSS 120B</span>
                   </h2>
                   <p className="text-xs text-slate-400 mb-4">Structured output from unstructured citizen description</p>
-                  <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs space-y-0.5">
+                  <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs space-y-0.5 overflow-x-auto">
                     <p><span className="text-slate-500">{"{"}</span></p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"summary"</span>: <span className="text-amber-300">"{g.triage.summary}"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"category"</span>: <span className="text-amber-300">"{g.category}"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"priority"</span>: <span className="text-red-400">"HIGH"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"affected_population"</span>: <span className="text-amber-300">"{g.triage.affectedPop}"</span>,</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"urgency_reason"</span>: [</p>
-                    {g.triage.urgency.map((u, i) => (
-                      <p key={i}>&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-amber-300">"{u}"</span>{i < g.triage.urgency.length - 1 ? "," : ""}</p>
-                    ))}
-                    <p>&nbsp;&nbsp;],</p>
-                    <p>&nbsp;&nbsp;<span className="text-blue-400">"confidence"</span>: <span className="text-green-400">{g.triage.confidence}</span></p>
+                    {grievance?.ai_triage_data ? (
+                      Object.entries(grievance.ai_triage_data).map(([key, val], index, arr) => {
+                        const isLast = index === arr.length - 1;
+                        let valSpan;
+                        if (Array.isArray(val)) {
+                          valSpan = <>[ {val.map((v, i) => <React.Fragment key={i}><span className="text-amber-300">"{v}"</span>{i < val.length - 1 ? ", " : ""}</React.Fragment>)} ]</>;
+                        } else if (typeof val === 'number') {
+                          valSpan = <span className="text-purple-400">{val}</span>;
+                        } else {
+                          valSpan = <span className={key === 'priority' ? "text-red-400" : "text-amber-300"}>"{val}"</span>;
+                        }
+                        return (
+                          <p key={key}>&nbsp;&nbsp;<span className="text-blue-400">"{key}"</span>: {valSpan}{!isLast && ","}</p>
+                        );
+                      })
+                    ) : (
+                      <p>&nbsp;&nbsp;<span className="text-slate-400 italic">// Waiting for AI Agent...</span></p>
+                    )}
                     <p><span className="text-slate-500">{"}"}</span></p>
                   </div>
                 </div>
@@ -511,7 +546,7 @@ export default function GrievanceDetails() {
                   <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                     <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">AI Confidence</p>
                     <div className="flex items-end gap-2 mb-2">
-                      <span className="text-3xl font-extrabold text-green-600">{Math.round(g.triage.confidence * 100)}%</span>
+                      <span className="text-3xl font-extrabold text-green-600">{Math.round((g.triage?.confidence || 0.94) * 100)}%</span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                       <motion.div className="h-full bg-green-500 rounded-full"
