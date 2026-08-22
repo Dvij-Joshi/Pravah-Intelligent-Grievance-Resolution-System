@@ -58,7 +58,8 @@ export function mapGrievance(g) {
     ai_triage_data: g.ai_triage_data || null,
     ai_evidence_report: g.ai_evidence_report || null,
     ai_verdict: g.ai_verdict || null,
-    created_at_raw: g.created_at
+    created_at_raw: g.created_at,
+    updated_at_raw: g.updated_at || g.created_at
   };
 }
 
