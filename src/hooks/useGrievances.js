@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAllGrievances, fetchGrievanceById, mapGrievance } from '../lib/grievanceService';
+import { fetchAllGrievances, mapGrievance } from '../lib/grievanceService';
+import { supabase } from '../lib/supabase';
 
 /**
  * Hook: fetches ALL grievances (officer list / dashboard).
+ * Subscribes to Supabase realtime so the list auto-updates.
  * Returns { grievances, loading, error, refetch }
  */
 export function useGrievances() {
@@ -23,10 +25,29 @@ export function useGrievances() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+
+    // Realtime: patch local state on UPDATE, reload on INSERT/DELETE
+    const channel = supabase
+      .channel('grievances-list')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'grievances' }, (payload) => {
+        setGrievances(prev =>
+          prev.map(g => g.dbId === payload.new.id ? mapGrievance(payload.new) : g)
+        );
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'grievances' }, () => load())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'grievances' }, (payload) => {
+        setGrievances(prev => prev.filter(g => g.dbId !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
 
   return { grievances, loading, error, refetch: load };
 }
+
 
 /**
  * Hook: fetches a SINGLE grievance by its Supabase UUID or readable_id.
