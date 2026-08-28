@@ -18,6 +18,7 @@ import {
 import OfficerLayout from "../../layouts/OfficerLayout";
 import { PriorityBadge, SLABadge, StatusBadge } from "../../components/Badges";
 import { useGrievances } from "../../hooks/useGrievances";
+import { useDebounce } from "../../hooks/useDebounce";
 
 const CATEGORIES = ["All", "Water Supply", "Road Damage", "Street Light", "Garbage Collection", "Sewage", "Parks"];
 const PRIORITIES = ["All", "HIGH", "MEDIUM", "LOW"];
@@ -42,12 +43,14 @@ export default function AllComplaints() {
   const navigate = useNavigate();
   const { grievances, loading, error, refetch } = useGrievances();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [activeTab, setActiveTab] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [showFilters, setShowFilters] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: "submitted", dir: "desc" });
+
 
   const handleSort = (field) => {
     setSortConfig((prev) =>
@@ -75,13 +78,13 @@ export default function AllComplaints() {
     if (activeTab === "At Risk") data = data.filter((c) => c.slaStatus === "warning" || c.slaStatus === "critical");
     if (activeTab === "Overdue") data = data.filter((c) => c.slaStatus === "overdue");
 
-    // Search
-    if (search)
+    // Search (uses debounced value — only re-runs 300ms after user stops typing)
+    if (debouncedSearch)
       data = data.filter(
         (c) =>
-          c.id.toLowerCase().includes(search.toLowerCase()) ||
-          c.title.toLowerCase().includes(search.toLowerCase()) ||
-          c.location?.toLowerCase().includes(search.toLowerCase())
+          c.id.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          c.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          c.location?.toLowerCase().includes(debouncedSearch.toLowerCase())
       );
 
     // Dropdowns
@@ -98,7 +101,7 @@ export default function AllComplaints() {
     });
 
     return data;
-  }, [grievances, search, activeTab, filterCategory, filterPriority, filterStatus, sortConfig]);
+  }, [grievances, debouncedSearch, activeTab, filterCategory, filterPriority, filterStatus, sortConfig]);
 
   const tabCounts = {
     "All": grievances.length,
