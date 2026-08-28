@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 
 const priorityConfig = {
   HIGH: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", dot: "bg-red-500" },
@@ -22,7 +22,7 @@ const statusConfig = {
   "Resolved": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
 };
 
-export function PriorityBadge({ priority }) {
+export const PriorityBadge = memo(function PriorityBadge({ priority }) {
   const cfg = priorityConfig[priority] || priorityConfig.LOW;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
@@ -30,22 +30,23 @@ export function PriorityBadge({ priority }) {
       {priority}
     </span>
   );
-}
+});
 
-export function SLABadge({ slaRemaining, slaStatus }) {
+export const SLABadge = memo(function SLABadge({ slaRemaining, slaStatus }) {
   const cfg = slaConfig[slaStatus] || slaConfig.ok;
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
       {slaRemaining}
     </span>
   );
-}
+});
 
-export function StatusBadge({ status }) {
+export const StatusBadge = memo(function StatusBadge({ status }) {
   const cfg = statusConfig[status] || statusConfig["Pending"];
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
       {status}
     </span>
   );
-}
+});
+
