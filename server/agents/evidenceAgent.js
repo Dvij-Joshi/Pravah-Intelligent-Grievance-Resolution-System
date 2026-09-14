@@ -34,9 +34,9 @@ Officer Resolution Note: ${officerNote || "Not provided"}`;
       },
       { role: "user", content: prompt + "\n\n/no_think\n\nRespond with only the JSON object:" }
     ],
-    model: "qwen/qwen3.6-27b",
+    model: "qwen/qwen3.8-27b",
     temperature: 0.1,
-    max_tokens: 1024,
+    max_tokens: 800,
   });
 
   const rawContent = completion.choices[0]?.message?.content || '';
