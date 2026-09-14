@@ -83,6 +83,7 @@ export default function AllComplaints() {
       data = data.filter(
         (c) =>
           c.id.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          (c.readable_id || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
           c.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
           c.location?.toLowerCase().includes(debouncedSearch.toLowerCase())
       );
@@ -343,7 +344,7 @@ export default function AllComplaints() {
                 >
                   {/* ID */}
                   <div>
-                    <div className="text-sm font-bold text-blue-700 group-hover:underline">{c.id}</div>
+                    <div className="text-sm font-bold text-blue-700 group-hover:underline">{c.readable_id || c.id}</div>
                     <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
                       <MapPin size={10} />
                       {c.location}

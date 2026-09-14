@@ -99,7 +99,7 @@ export default function OfficerDashboard() {
           ? new Date(rawDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
           : '—';
 
-        return { id: g.dbId ?? i, type, action, grievance: g.id, time: timeStr };
+        return { id: g.dbId ?? i, type, action, grievance: g.readable_id ?? g.id, time: timeStr };
       })
   , [grievances]);
 
@@ -214,7 +214,7 @@ export default function OfficerDashboard() {
                 >
                   {/* Grievance ID */}
                   <div className="w-24 flex-shrink-0">
-                    <div className="text-xs font-bold text-blue-700 group-hover:underline">{c.id}</div>
+                    <div className="text-xs font-bold text-blue-700 group-hover:underline">{c.readable_id || c.id}</div>
                     <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
                       <MapPin size={10} />
                       {c.location}

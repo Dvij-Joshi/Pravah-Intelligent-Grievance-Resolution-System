@@ -36,7 +36,8 @@ export async function updateGrievanceStatus(id, status) {
  */
 export function mapGrievance(g) {
   return {
-    id: g.readable_id || g.id,
+    id: g.id,                               // Real UUID — used for DB queries & navigation
+    readable_id: g.readable_id || g.id,     // Human-readable ID for display (e.g. GRV-3493)
     dbId: g.id,
     title: g.title,
     category: g.category,
